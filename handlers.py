@@ -10,13 +10,9 @@ import keyboards as kb
 
 router = Router()
 
-ALL_ITEMS = {}
-for k, v in kb.STARS_PACKAGES.items():
-    ALL_ITEMS[k] = ("استارز", f"{v[0]} استارز", v[1])
-for k, v in kb.GIFT_ITEMS.items():
-    ALL_ITEMS[k] = ("گیفت", v[0], v[1])
-for k, v in kb.PREMIUM_PLANS.items():
-    ALL_ITEMS[k] = ("پرمیوم", f"پرمیوم {v[0]}", v[1])
+
+def is_admin(user_id: int) -> bool:
+    return config.ADMIN_ID != 0 and user_id == config.ADMIN_ID
 
 
 class ChargeState(StatesGroup):
@@ -24,9 +20,16 @@ class ChargeState(StatesGroup):
     waiting_receipt = State()
 
 
+class AdminState(StatesGroup):
+    waiting_new_price = State()      # data: product_id
+    waiting_new_name = State()       # data: product_id
+    waiting_new_item_name = State()  # data: category
+    waiting_new_item_price = State() # data: category, name
+
+
 # ---------------- START ----------------
 @router.message(CommandStart())
-async def cmd_start(message: Message, command: Command = None):
+async def cmd_start(message: Message):
     referrer_id = None
     args = message.text.split(maxsplit=1)
     if len(args) > 1 and args[1].startswith("ref"):
@@ -44,56 +47,69 @@ async def cmd_start(message: Message, command: Command = None):
         "از منوی زیر می‌تونی استارز، گیفت و پرمیوم تلگرام رو با بهترین قیمت بخری. ✅\n"
         "خرید امن، سریع و با پشتیبانی ۲۴ ساعته 🐶"
     )
-    await message.answer(text, reply_markup=kb.main_menu())
+    await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
 
 
 # ---------------- بازگشت به منوی اصلی ----------------
 @router.callback_query(F.data == "menu_main")
-async def cb_main_menu(call: CallbackQuery):
+async def cb_main_menu(call: CallbackQuery, state: FSMContext):
+    await state.clear()
     await call.message.edit_text(
         "🐾 <b>Dogg Starz | داگ استارز</b>\nیکی از گزینه‌ها رو انتخاب کن:",
-        reply_markup=kb.main_menu()
+        reply_markup=kb.main_menu(is_admin(call.from_user.id))
     )
     await call.answer()
 
 
-# ---------------- زیرمنوها ----------------
+# ---------------- زیرمنوهای خرید ----------------
 @router.callback_query(F.data == "menu_stars")
 async def cb_stars(call: CallbackQuery):
-    await call.message.edit_text("⭐ یکی از بسته‌های استارز رو انتخاب کن:", reply_markup=kb.stars_menu())
+    products = await db.get_products("stars")
+    await call.message.edit_text("⭐ یکی از بسته‌های استارز رو انتخاب کن:", reply_markup=kb.category_menu("stars", products))
     await call.answer()
 
 
 @router.callback_query(F.data == "menu_gift")
 async def cb_gift(call: CallbackQuery):
-    await call.message.edit_text("🎁 یکی از گیفت‌ها رو انتخاب کن:", reply_markup=kb.gift_menu())
+    products = await db.get_products("gift")
+    await call.message.edit_text("🎁 یکی از گیفت‌ها رو انتخاب کن:", reply_markup=kb.category_menu("gift", products))
     await call.answer()
 
 
 @router.callback_query(F.data == "menu_premium")
 async def cb_premium(call: CallbackQuery):
-    await call.message.edit_text("⭐ یکی از پلن‌های پرمیوم رو انتخاب کن:", reply_markup=kb.premium_menu())
+    products = await db.get_products("premium")
+    await call.message.edit_text("⭐ یکی از پلن‌های پرمیوم رو انتخاب کن:", reply_markup=kb.category_menu("premium", products))
     await call.answer()
 
 
 # ---------------- انتخاب آیتم برای خرید ----------------
-@router.callback_query(F.data.in_(ALL_ITEMS.keys()))
+@router.callback_query(F.data.startswith("item_"))
 async def cb_item_selected(call: CallbackQuery):
-    category, name, price = ALL_ITEMS[call.data]
+    product_id = int(call.data.replace("item_", ""))
+    product = await db.get_product(product_id)
+    if not product:
+        await call.answer("این آیتم دیگه موجود نیست.", show_alert=True)
+        return
+
+    _, category, name, price = product
     text = (
         f"🧾 <b>{name}</b>\n"
-        f"دسته: {category}\n"
         f"قیمت: <b>{price:,}</b> تومان\n\n"
         "برای تکمیل خرید، مبلغ از کیف پول شما کسر میشه. اگر موجودی کافی نداری اول باید حساب رو شارژ کنی."
     )
-    await call.message.edit_text(text, reply_markup=kb.confirm_purchase(call.data))
+    await call.message.edit_text(text, reply_markup=kb.confirm_purchase(product_id))
     await call.answer()
 
 
 @router.callback_query(F.data.startswith("confirm_"))
 async def cb_confirm_purchase(call: CallbackQuery, bot: Bot):
-    item_key = call.data.replace("confirm_", "")
-    category, name, price = ALL_ITEMS[item_key]
+    product_id = int(call.data.replace("confirm_", ""))
+    product = await db.get_product(product_id)
+    if not product:
+        await call.answer("این آیتم دیگه موجود نیست.", show_alert=True)
+        return
+    _, category, name, price = product
 
     user = await db.get_user(call.from_user.id)
     balance = user[2] if user else 0
@@ -103,7 +119,7 @@ async def cb_confirm_purchase(call: CallbackQuery, bot: Bot):
         return
 
     await db.update_balance(call.from_user.id, -price)
-    order_id = await db.create_order(call.from_user.id, category, name, price)
+    order_id = await db.create_order(call.from_user.id, kb.CATEGORY_LABELS.get(category, category), name, price)
 
     await call.message.edit_text(
         f"✅ سفارش شما ثبت شد!\n\n"
@@ -260,12 +276,12 @@ async def receive_charge_receipt_wrong(message: Message):
 # ---------------- اکشن‌های ادمین: تایید/رد شارژ ----------------
 @router.callback_query(F.data.startswith("admincharge_"))
 async def cb_admin_charge_action(call: CallbackQuery, bot: Bot):
-    if call.from_user.id != config.ADMIN_ID:
+    if not is_admin(call.from_user.id):
         await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
         return
 
-    _, action, request_id = call.data.split("_", 2)
     request_id = call.data.split("_", 2)[2]
+    action = call.data.split("_", 2)[1]
     req = await db.get_charge_request(request_id)
     if not req:
         await call.answer("درخواست پیدا نشد.", show_alert=True)
@@ -292,7 +308,7 @@ async def cb_admin_charge_action(call: CallbackQuery, bot: Bot):
 # ---------------- اکشن‌های ادمین: تغییر وضعیت سفارش ----------------
 @router.callback_query(F.data.startswith("adminorder_"))
 async def cb_admin_order_action(call: CallbackQuery, bot: Bot):
-    if call.from_user.id != config.ADMIN_ID:
+    if not is_admin(call.from_user.id):
         await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
         return
 
@@ -313,8 +329,204 @@ async def cb_admin_order_action(call: CallbackQuery, bot: Bot):
         await bot.send_message(user_id, f"✅ سفارش شما ({item}) با موفقیت انجام شد. ممنون از خریدت 🐾")
     else:
         await db.set_order_status(order_id, "cancelled")
-        await db.update_balance(user_id, price)  # برگشت وجه به کیف پول
+        await db.update_balance(user_id, price)
         await call.message.edit_text(call.message.text + "\n\n❌ لغو شد و مبلغ به کیف پول کاربر برگشت.")
         await bot.send_message(user_id, f"❌ سفارش شما ({item}) لغو شد و مبلغ به کیف پولت برگشت داده شد.")
 
     await call.answer()
+
+
+# ==================== پنل مدیریت محصولات (فقط ادمین) ====================
+
+@router.callback_query(F.data == "admin_panel")
+async def cb_admin_panel(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.clear()
+    await call.message.edit_text(
+        "⚙️ <b>پنل مدیریت</b>\nکدوم بخش رو می‌خوای مدیریت کنی؟",
+        reply_markup=kb.admin_panel_menu()
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("admincat_"))
+async def cb_admin_category(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    category = call.data.replace("admincat_", "")
+    products = await db.get_products(category)
+    label = kb.CATEGORY_LABELS.get(category, category)
+    text = f"📋 <b>مدیریت {label}</b>\nروی هر آیتم بزن تا ویرایش/حذفش کنی، یا آیتم جدید اضافه کن."
+    if not products:
+        text += "\n\nهنوز آیتمی اضافه نشده."
+    await call.message.edit_text(text, reply_markup=kb.admin_category_menu(category, products))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adminedit_"))
+async def cb_admin_edit_item(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    product_id = int(call.data.replace("adminedit_", ""))
+    product = await db.get_product(product_id)
+    if not product:
+        await call.answer("این آیتم دیگه وجود نداره.", show_alert=True)
+        return
+    _, category, name, price = product
+    text = f"🧾 <b>{name}</b>\nقیمت فعلی: <b>{price:,}</b> تومان\n\nچیکار می‌خوای بکنی؟"
+    await call.message.edit_text(text, reply_markup=kb.admin_item_actions(product_id, category))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adminprice_"))
+async def cb_admin_price_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    product_id = int(call.data.replace("adminprice_", ""))
+    await state.update_data(product_id=product_id)
+    await state.set_state(AdminState.waiting_new_price)
+    await call.message.edit_text("💰 قیمت جدید رو به تومان بفرست (فقط عدد، مثلاً 250000):")
+    await call.answer()
+
+
+@router.message(AdminState.waiting_new_price)
+async def admin_receive_new_price(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip().isdigit():
+        await message.answer("لطفاً فقط عدد بفرست (مثلاً 250000).")
+        return
+    data = await state.get_data()
+    product_id = data.get("product_id")
+    new_price = int(message.text.strip())
+
+    await db.update_product_price(product_id, new_price)
+    product = await db.get_product(product_id)
+    await state.clear()
+
+    if product:
+        _, category, name, price = product
+        await message.answer(
+            f"✅ قیمت «{name}» به {price:,} تومان تغییر کرد.",
+            reply_markup=kb.admin_item_actions(product_id, category)
+        )
+    else:
+        await message.answer("✅ قیمت به‌روزرسانی شد.")
+
+
+@router.callback_query(F.data.startswith("adminname_"))
+async def cb_admin_name_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    product_id = int(call.data.replace("adminname_", ""))
+    await state.update_data(product_id=product_id)
+    await state.set_state(AdminState.waiting_new_name)
+    await call.message.edit_text("✏️ نام جدید آیتم رو بفرست:")
+    await call.answer()
+
+
+@router.message(AdminState.waiting_new_name)
+async def admin_receive_new_name(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip():
+        await message.answer("لطفاً یه نام معتبر بفرست.")
+        return
+    data = await state.get_data()
+    product_id = data.get("product_id")
+    new_name = message.text.strip()
+
+    await db.update_product_name(product_id, new_name)
+    product = await db.get_product(product_id)
+    await state.clear()
+
+    if product:
+        _, category, name, price = product
+        await message.answer(
+            f"✅ نام آیتم به «{name}» تغییر کرد.",
+            reply_markup=kb.admin_item_actions(product_id, category)
+        )
+    else:
+        await message.answer("✅ نام به‌روزرسانی شد.")
+
+
+@router.callback_query(F.data.startswith("admindelok_"))
+async def cb_admin_delete_confirmed(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    product_id = int(call.data.replace("admindelok_", ""))
+    product = await db.get_product(product_id)
+    category = product[1] if product else "stars"
+
+    await db.delete_product(product_id)
+    products = await db.get_products(category)
+    label = kb.CATEGORY_LABELS.get(category, category)
+    await call.message.edit_text(
+        f"🗑 آیتم حذف شد.\n\n📋 <b>مدیریت {label}</b>",
+        reply_markup=kb.admin_category_menu(category, products)
+    )
+    await call.answer("حذف شد ✅")
+
+
+@router.callback_query(F.data.startswith("admindel_"))
+async def cb_admin_delete_ask(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    product_id = int(call.data.replace("admindel_", ""))
+    product = await db.get_product(product_id)
+    if not product:
+        await call.answer("این آیتم دیگه وجود نداره.", show_alert=True)
+        return
+    _, category, name, price = product
+    await call.message.edit_text(
+        f"⚠️ مطمئنی می‌خوای «{name}» رو حذف کنی؟",
+        reply_markup=kb.admin_delete_confirm(product_id, category)
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adminadd_"))
+async def cb_admin_add_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    category = call.data.replace("adminadd_", "")
+    await state.update_data(category=category)
+    await state.set_state(AdminState.waiting_new_item_name)
+    await call.message.edit_text("➕ نام آیتم جدید رو بفرست (مثلاً: 5000 استارز):")
+    await call.answer()
+
+
+@router.message(AdminState.waiting_new_item_name)
+async def admin_receive_item_name(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip():
+        await message.answer("لطفاً یه نام معتبر بفرست.")
+        return
+    await state.update_data(name=message.text.strip())
+    await state.set_state(AdminState.waiting_new_item_price)
+    await message.answer("💰 حالا قیمت این آیتم رو به تومان بفرست (فقط عدد):")
+
+
+@router.message(AdminState.waiting_new_item_price)
+async def admin_receive_item_price(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip().isdigit():
+        await message.answer("لطفاً فقط عدد بفرست (مثلاً 250000).")
+        return
+    data = await state.get_data()
+    category = data.get("category")
+    name = data.get("name")
+    price = int(message.text.strip())
+
+    await db.add_product(category, name, price)
+    await state.clear()
+
+    products = await db.get_products(category)
+    label = kb.CATEGORY_LABELS.get(category, category)
+    await message.answer(
+        f"✅ آیتم «{name}» با قیمت {price:,} تومان اضافه شد.\n\n📋 <b>مدیریت {label}</b>",
+        reply_markup=kb.admin_category_menu(category, products)
+    )
