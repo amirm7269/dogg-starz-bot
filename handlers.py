@@ -263,9 +263,10 @@ async def cb_confirm_purchase(call: CallbackQuery, bot: Bot):
     )
     await call.answer("سفارش ثبت شد ✅")
 
-    if config.ADMIN_ID:
+    order_target = config.ORDER_CHANNEL_ID if config.ORDER_CHANNEL_ID else config.ADMIN_ID
+    if order_target:
         await bot.send_message(
-            config.ADMIN_ID,
+            order_target,
             f"🆕 سفارش جدید\n"
             f"کاربر: {call.from_user.id} (@{call.from_user.username})\n"
             f"آیتم: {name}\n"
