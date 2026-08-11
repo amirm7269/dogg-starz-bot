@@ -3,6 +3,9 @@ import os
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
+# آدرس اتصال دیتابیس PostgreSQL دائمی (خودش با اضافه کردن سرویس Postgres در Railway ست میشه)
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+
 # آیدی عددی چنلی که رسیدهای واریزی توش برای تایید/رد ارسال میشن (اختیاری)
 # اگه ست نشه، رسیدها مثل قبل مستقیم برای ادمین پیام میشن
 CHARGE_CHANNEL_ID = int(os.getenv("CHARGE_CHANNEL_ID", "0"))
