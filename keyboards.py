@@ -11,13 +11,13 @@ CATEGORY_LABELS = {
 # ---------- منوی اصلی ----------
 def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.button(text="🛒 خرید استارز", callback_data="menu_stars")
+    b.button(text="⭐️ خرید استارز", callback_data="menu_stars")
     b.button(text="🎁 خرید گیفت", callback_data="menu_gift")
-    b.button(text="⭐ خرید پرمیوم", callback_data="menu_premium")
+    b.button(text="💎 خرید پرمیوم", callback_data="menu_premium")
     b.button(text="💳 افزایش موجودی", callback_data="menu_charge")
-    b.button(text="👤 حساب کاربری", callback_data="menu_account")
+    b.button(text="👤 حساب من", callback_data="menu_account")
     b.button(text="🔗 زیرمجموعه‌گیری", callback_data="menu_referral")
-    b.button(text="📦 پیگیری سفارش", callback_data="menu_orders")
+    b.button(text="📦 سفارش‌های من", callback_data="menu_orders")
     b.button(text="🆘 پشتیبانی", callback_data="menu_support")
     if is_admin:
         b.button(text="⚙️ پنل مدیریت", callback_data="admin_panel")
@@ -29,7 +29,7 @@ def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
 
 def back_button(target="menu_main") -> InlineKeyboardBuilder:
     b = InlineKeyboardBuilder()
-    b.button(text="🔙 بازگشت", callback_data=target)
+    b.button(text="🔙 بازگشت به منو", callback_data=target)
     return b
 
 
