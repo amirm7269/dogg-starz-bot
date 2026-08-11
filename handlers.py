@@ -27,6 +27,33 @@ class AdminState(StatesGroup):
     waiting_new_item_price = State() # data: category, name
 
 
+GIFT_BULK_ITEMS = [
+    # گیفت‌های عادی
+    ("💝 گیفت قلب", 7000),
+    ("🧸 گیفت تدی", 7000),
+    ("🎁 گیفت کادو", 12000),
+    ("🌹 گیفت گل رز", 12000),
+    ("🎂 گیفت کیک", 23000),
+    ("🌸 گیفت گل", 23000),
+    ("🍾 گیفت بطری", 23000),
+    ("🚀 گیفت سفینه", 23000),
+    ("🏆 گیفت جام", 45000),
+    ("💍 گیفت حلقه", 45000),
+    ("💎 گیفت الماس", 45000),
+    # گیفت‌های مناسبتی
+    ("🐰 تدی خرگوشی", 23000),
+    ("🎄 تدی درخت کاج", 23000),
+    ("🎅 گیفت تدی نوئل", 23000),
+    ("⚽ گیفت لیونل تدی", 23000),
+    ("🤡 گیفت تدی دلقک", 23000),
+    ("🍀 گیفت تدی پیلدار", 23000),
+    ("🌸 گیفت تدی صورتی", 23000),
+    ("👷 گیفت تدی مهندس", 23000),
+    ("💝 گیفت قلب ولنتاین", 23000),
+    ("🧸 گیفت خرس ولنتاین", 23000),
+]
+
+
 # ---------------- START ----------------
 @router.message(CommandStart())
 async def cmd_start(message: Message):
@@ -48,6 +75,29 @@ async def cmd_start(message: Message):
         "خرید امن، سریع و با پشتیبانی ۲۴ ساعته 🐶"
     )
     await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+
+
+# ---------------- افزودن دسته‌ای گیفت‌های آماده (فقط ادمین) ----------------
+@router.message(Command("addgifts"))
+async def cmd_add_gifts(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    existing = await db.get_products("gift")
+    existing_names = {name for (_id, name, _price) in existing}
+
+    added = 0
+    for name, price in GIFT_BULK_ITEMS:
+        if name in existing_names:
+            continue
+        await db.add_product("gift", name, price)
+        added += 1
+
+    await message.answer(
+        f"✅ {added} گیفت جدید اضافه شد.\n"
+        f"{len(GIFT_BULK_ITEMS) - added} تای دیگه از قبل موجود بودن.\n\n"
+        "از منوی «🎁 خرید گیفت» یا «⚙️ پنل مدیریت → مدیریت گیفت» می‌تونی ببینی‌شون."
+    )
 
 
 # ---------------- بازگشت به منوی اصلی ----------------
