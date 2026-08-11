@@ -36,6 +36,90 @@ async def init_db():
                 created_at TEXT
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT,
+                name TEXT,
+                price INTEGER,
+                sort_order INTEGER DEFAULT 0
+            )
+        """)
+        await db.commit()
+
+    await _seed_default_products()
+
+
+async def _seed_default_products():
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        cur = await db.execute("SELECT COUNT(*) FROM products")
+        row = await cur.fetchone()
+        if row and row[0] > 0:
+            return
+
+        defaults = [
+            ("stars", "100 استارز", 45000, 1),
+            ("stars", "500 استارز", 210000, 2),
+            ("stars", "1000 استارز", 400000, 3),
+            ("stars", "2500 استارز", 950000, 4),
+            ("gift", "خرس تدی 🧸", 120000, 1),
+            ("gift", "قلب طلایی 💛", 90000, 2),
+            ("gift", "کیک تولد 🎂", 60000, 3),
+            ("gift", "راکت فضایی 🚀", 200000, 4),
+            ("premium", "پرمیوم 1 ماهه", 350000, 1),
+            ("premium", "پرمیوم 3 ماهه", 950000, 2),
+            ("premium", "پرمیوم 12 ماهه", 3200000, 3),
+        ]
+        await db.executemany(
+            "INSERT INTO products (category, name, price, sort_order) VALUES (?, ?, ?, ?)",
+            defaults
+        )
+        await db.commit()
+
+
+async def get_products(category: str):
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT id, name, price FROM products WHERE category = ? ORDER BY sort_order, id",
+            (category,)
+        )
+        return await cur.fetchall()
+
+
+async def get_product(product_id: int):
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT id, category, name, price FROM products WHERE id = ?",
+            (product_id,)
+        )
+        return await cur.fetchone()
+
+
+async def add_product(category: str, name: str, price: int):
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        cur = await db.execute(
+            "INSERT INTO products (category, name, price, sort_order) VALUES (?, ?, ?, 999)",
+            (category, name, price)
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def update_product_price(product_id: int, price: int):
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        await db.execute("UPDATE products SET price = ? WHERE id = ?", (price, product_id))
+        await db.commit()
+
+
+async def update_product_name(product_id: int, name: str):
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        await db.execute("UPDATE products SET name = ? WHERE id = ?", (name, product_id))
+        await db.commit()
+
+
+async def delete_product(product_id: int):
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        await db.execute("DELETE FROM products WHERE id = ?", (product_id,))
         await db.commit()
 
 
