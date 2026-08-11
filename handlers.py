@@ -11,6 +11,13 @@ import keyboards as kb
 router = Router()
 
 
+# ---------------- گرفتن آیدی عددی یه چنل (برای تنظیم CHARGE_CHANNEL_ID) ----------------
+# کافیه ربات رو ادمین چنل کنید و توی چنل بنویسید: /id
+@router.channel_post(F.text == "/id")
+async def channel_get_id(message: Message):
+    await message.answer(f"🆔 آیدی عددی این چنل:\n<code>{message.chat.id}</code>")
+
+
 def is_admin(user_id: int) -> bool:
     return config.ADMIN_ID != 0 and user_id == config.ADMIN_ID
 
@@ -391,9 +398,10 @@ async def receive_charge_receipt(message: Message, state: FSMContext, bot: Bot):
         "بعد از تایید ادمین، موجودی حسابت اضافه میشه."
     )
 
-    if config.ADMIN_ID:
+    target_chat = config.CHARGE_CHANNEL_ID if config.CHARGE_CHANNEL_ID else config.ADMIN_ID
+    if target_chat:
         await bot.send_photo(
-            config.ADMIN_ID,
+            target_chat,
             photo=message.photo[-1].file_id,
             caption=(
                 f"🆕 درخواست شارژ جدید\n"
