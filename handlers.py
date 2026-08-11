@@ -27,8 +27,20 @@ class AdminState(StatesGroup):
     waiting_new_item_price = State() # data: category, name
 
 
-GIFT_BULK_ITEMS = [
-    # گیفت‌های عادی
+GIFT_SPECIAL_ITEMS = [
+    ("🐰 گیفت تدی خرگوشی", 23000),
+    ("🎄 گیفت تدی درخت کاج", 23000),
+    ("🎅 گیفت تدی نوئل", 23000),
+    ("🧸 گیفت لیونل تدی", 23000),
+    ("🤡 گیفت تدی دلقک", 23000),
+    ("🍀 گیفت تدی پیلدار", 23000),
+    ("🌸 گیفت تدی صورتی", 23000),
+    ("👷 گیفت تدی مهندس", 23000),
+    ("💝 گیفت قلب ولن", 23000),
+    ("🧸 گیفت خرس ولن", 23000),
+]
+
+GIFT_NORMAL_ITEMS = [
     ("💝 گیفت قلب", 7000),
     ("🧸 گیفت تدی", 7000),
     ("🎁 گیفت کادو", 12000),
@@ -40,17 +52,6 @@ GIFT_BULK_ITEMS = [
     ("🏆 گیفت جام", 45000),
     ("💍 گیفت حلقه", 45000),
     ("💎 گیفت الماس", 45000),
-    # گیفت‌های مناسبتی
-    ("🐰 تدی خرگوشی", 23000),
-    ("🎄 تدی درخت کاج", 23000),
-    ("🎅 گیفت تدی نوئل", 23000),
-    ("⚽ گیفت لیونل تدی", 23000),
-    ("🤡 گیفت تدی دلقک", 23000),
-    ("🍀 گیفت تدی پیلدار", 23000),
-    ("🌸 گیفت تدی صورتی", 23000),
-    ("👷 گیفت تدی مهندس", 23000),
-    ("💝 گیفت قلب ولنتاین", 23000),
-    ("🧸 گیفت خرس ولنتاین", 23000),
 ]
 
 
@@ -83,20 +84,31 @@ async def cmd_add_gifts(message: Message):
     if not is_admin(message.from_user.id):
         return
 
-    existing = await db.get_products("gift")
-    existing_names = {name for (_id, name, _price) in existing}
+    # پاکسازی گیفت‌های قدیمی که با ساختار قبلی (دسته‌بندی‌نشده) اضافه شده بودن
+    old_gifts = await db.get_products("gift")
+    for product_id, _name, _price in old_gifts:
+        await db.delete_product(product_id)
 
     added = 0
-    for name, price in GIFT_BULK_ITEMS:
-        if name in existing_names:
+    existing_special = {name for (_id, name, _price) in await db.get_products("gift_special")}
+    for name, price in GIFT_SPECIAL_ITEMS:
+        if name in existing_special:
             continue
-        await db.add_product("gift", name, price)
+        await db.add_product("gift_special", name, price)
         added += 1
 
+    existing_normal = {name for (_id, name, _price) in await db.get_products("gift_normal")}
+    for name, price in GIFT_NORMAL_ITEMS:
+        if name in existing_normal:
+            continue
+        await db.add_product("gift_normal", name, price)
+        added += 1
+
+    total = len(GIFT_SPECIAL_ITEMS) + len(GIFT_NORMAL_ITEMS)
     await message.answer(
-        f"✅ {added} گیفت جدید اضافه شد.\n"
-        f"{len(GIFT_BULK_ITEMS) - added} تای دیگه از قبل موجود بودن.\n\n"
-        "از منوی «🎁 خرید گیفت» یا «⚙️ پنل مدیریت → مدیریت گیفت» می‌تونی ببینی‌شون."
+        f"✅ {added} گیفت جدید اضافه شد (از {total} تا).\n"
+        f"{total - added} تای دیگه از قبل موجود بودن.\n\n"
+        "از منوی «🎁 خرید گیفت» یا «⚙️ پنل مدیریت» می‌تونی ببینی‌شون."
     )
 
 
@@ -121,8 +133,27 @@ async def cb_stars(call: CallbackQuery):
 
 @router.callback_query(F.data == "menu_gift")
 async def cb_gift(call: CallbackQuery):
-    products = await db.get_products("gift")
-    await call.message.edit_text("🎁 یکی از گیفت‌ها رو انتخاب کن:", reply_markup=kb.category_menu("gift", products))
+    await call.message.edit_text("🎁 کدوم نوع گیفت رو می‌خوای؟", reply_markup=kb.gift_type_menu())
+    await call.answer()
+
+
+@router.callback_query(F.data == "menu_gift_special")
+async def cb_gift_special(call: CallbackQuery):
+    products = await db.get_products("gift_special")
+    await call.message.edit_text(
+        "🎊 گیفت های مناسبتی\nلطفاً گیفت مورد نظر خود را انتخاب کنید:",
+        reply_markup=kb.category_menu("gift_special", products, back_target="menu_gift")
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "menu_gift_normal")
+async def cb_gift_normal(call: CallbackQuery):
+    products = await db.get_products("gift_normal")
+    await call.message.edit_text(
+        "🧸 گیفت های عادی\nلطفاً گیفت مورد نظر خود را انتخاب کنید:",
+        reply_markup=kb.category_menu("gift_normal", products, back_target="menu_gift")
+    )
     await call.answer()
 
 
