@@ -1,8 +1,14 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup
 
+CATEGORY_LABELS = {
+    "stars": "استارز",
+    "gift": "گیفت",
+    "premium": "پرمیوم",
+}
+
 # ---------- منوی اصلی ----------
-def main_menu() -> InlineKeyboardMarkup:
+def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="🛒 خرید استارز", callback_data="menu_stars")
     b.button(text="🎁 خرید گیفت", callback_data="menu_gift")
@@ -12,7 +18,11 @@ def main_menu() -> InlineKeyboardMarkup:
     b.button(text="🔗 زیرمجموعه‌گیری", callback_data="menu_referral")
     b.button(text="📦 پیگیری سفارش", callback_data="menu_orders")
     b.button(text="🆘 پشتیبانی", callback_data="menu_support")
-    b.adjust(2, 2, 2, 2)
+    if is_admin:
+        b.button(text="⚙️ پنل مدیریت", callback_data="admin_panel")
+        b.adjust(2, 2, 2, 2, 1)
+    else:
+        b.adjust(2, 2, 2, 2)
     return b.as_markup()
 
 
@@ -22,51 +32,11 @@ def back_button(target="menu_main") -> InlineKeyboardBuilder:
     return b
 
 
-# ---------- زیرمنو: خرید استارز ----------
-STARS_PACKAGES = {
-    "stars_100": (100, 45000),
-    "stars_500": (500, 210000),
-    "stars_1000": (1000, 400000),
-    "stars_2500": (2500, 950000),
-}
-
-def stars_menu() -> InlineKeyboardMarkup:
+# ---------- زیرمنوی خرید (ساخته‌شده از روی محصولات دیتابیس) ----------
+def category_menu(category: str, products) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    for key, (amount, price) in STARS_PACKAGES.items():
-        b.button(text=f"⭐ {amount} استارز - {price:,} تومان", callback_data=key)
-    b.button(text="🔙 بازگشت", callback_data="menu_main")
-    b.adjust(1)
-    return b.as_markup()
-
-
-# ---------- زیرمنو: خرید گیفت ----------
-GIFT_ITEMS = {
-    "gift_1": ("خرس تدی 🧸", 120000),
-    "gift_2": ("قلب طلایی 💛", 90000),
-    "gift_3": ("کیک تولد 🎂", 60000),
-    "gift_4": ("راکت فضایی 🚀", 200000),
-}
-
-def gift_menu() -> InlineKeyboardMarkup:
-    b = InlineKeyboardBuilder()
-    for key, (name, price) in GIFT_ITEMS.items():
-        b.button(text=f"{name} - {price:,} تومان", callback_data=key)
-    b.button(text="🔙 بازگشت", callback_data="menu_main")
-    b.adjust(1)
-    return b.as_markup()
-
-
-# ---------- زیرمنو: خرید پرمیوم ----------
-PREMIUM_PLANS = {
-    "premium_1m": ("۱ ماهه", 350000),
-    "premium_3m": ("۳ ماهه", 950000),
-    "premium_12m": ("۱۲ ماهه", 3200000),
-}
-
-def premium_menu() -> InlineKeyboardMarkup:
-    b = InlineKeyboardBuilder()
-    for key, (label, price) in PREMIUM_PLANS.items():
-        b.button(text=f"⭐ پرمیوم {label} - {price:,} تومان", callback_data=key)
+    for product_id, name, price in products:
+        b.button(text=f"{name} - {price:,} تومان", callback_data=f"item_{product_id}")
     b.button(text="🔙 بازگشت", callback_data="menu_main")
     b.adjust(1)
     return b.as_markup()
@@ -83,9 +53,9 @@ def charge_menu() -> InlineKeyboardMarkup:
 
 
 # ---------- تایید خرید ----------
-def confirm_purchase(callback_data: str) -> InlineKeyboardMarkup:
+def confirm_purchase(product_id: int) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.button(text="✅ تایید و پرداخت از کیف پول", callback_data=f"confirm_{callback_data}")
+    b.button(text="✅ تایید و پرداخت از کیف پول", callback_data=f"confirm_{product_id}")
     b.button(text="🔙 بازگشت", callback_data="menu_main")
     b.adjust(1)
     return b.as_markup()
@@ -105,5 +75,44 @@ def admin_order_actions(order_id: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="✅ انجام شد", callback_data=f"adminorder_done_{order_id}")
     b.button(text="❌ رد سفارش", callback_data=f"adminorder_cancel_{order_id}")
+    b.adjust(2)
+    return b.as_markup()
+
+
+# ---------- پنل مدیریت محصولات ----------
+def admin_panel_menu() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="⭐ مدیریت استارز", callback_data="admincat_stars")
+    b.button(text="🎁 مدیریت گیفت", callback_data="admincat_gift")
+    b.button(text="⭐ مدیریت پرمیوم", callback_data="admincat_premium")
+    b.button(text="🔙 بازگشت", callback_data="menu_main")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_category_menu(category: str, products) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for product_id, name, price in products:
+        b.button(text=f"✏️ {name} - {price:,} تومان", callback_data=f"adminedit_{product_id}")
+    b.button(text="➕ افزودن آیتم جدید", callback_data=f"adminadd_{category}")
+    b.button(text="🔙 بازگشت", callback_data="admin_panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_item_actions(product_id: int, category: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="💰 تغییر قیمت", callback_data=f"adminprice_{product_id}")
+    b.button(text="✏️ تغییر نام", callback_data=f"adminname_{product_id}")
+    b.button(text="🗑 حذف آیتم", callback_data=f"admindel_{product_id}")
+    b.button(text="🔙 بازگشت", callback_data=f"admincat_{category}")
+    b.adjust(2, 1, 1)
+    return b.as_markup()
+
+
+def admin_delete_confirm(product_id: int, category: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ بله، حذف کن", callback_data=f"admindelok_{product_id}")
+    b.button(text="❌ انصراف", callback_data=f"adminedit_{product_id}")
     b.adjust(2)
     return b.as_markup()
