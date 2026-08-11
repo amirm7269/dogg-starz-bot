@@ -71,9 +71,14 @@ async def cmd_start(message: Message):
     await db.get_or_create_user(message.from_user.id, message.from_user.username or "", referrer_id)
 
     text = (
-        "🐾 به <b>Dogg Starz | داگ استارز</b> خوش اومدی!\n\n"
-        "از منوی زیر می‌تونی استارز، گیفت و پرمیوم تلگرام رو با بهترین قیمت بخری. ✅\n"
-        "خرید امن، سریع و با پشتیبانی ۲۴ ساعته 🐶"
+        "✨ ━━━━━━━━━━━━━━ ✨\n"
+        "🐾 <b>Dogg Starz | داگ استارز</b> 🐾\n"
+        "✨ ━━━━━━━━━━━━━━ ✨\n\n"
+        "به فروشگاه رسمی <b>استارز، گیفت و پرمیوم تلگرام</b> خوش اومدی! 🎉\n\n"
+        "🛡 <b>خرید ۱۰۰٪ امن و تضمینی</b>\n"
+        "⚡️ <b>تحویل سریع و آنی</b>\n"
+        "🕐 <b>پشتیبانی ۲۴ ساعته</b>\n\n"
+        "👇 یکی از گزینه‌های زیر رو انتخاب کن:"
     )
     await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
 
@@ -117,7 +122,10 @@ async def cmd_add_gifts(message: Message):
 async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     await state.clear()
     await call.message.edit_text(
-        "🐾 <b>Dogg Starz | داگ استارز</b>\nیکی از گزینه‌ها رو انتخاب کن:",
+        "✨ ━━━━━━━━━━━━━━ ✨\n"
+        "🐾 <b>Dogg Starz | داگ استارز</b> 🐾\n"
+        "✨ ━━━━━━━━━━━━━━ ✨\n\n"
+        "👇 یکی از گزینه‌های زیر رو انتخاب کن:",
         reply_markup=kb.main_menu(is_admin(call.from_user.id))
     )
     await call.answer()
@@ -127,21 +135,39 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "menu_stars")
 async def cb_stars(call: CallbackQuery):
     products = await db.get_products("stars")
-    await call.message.edit_text("⭐ یکی از بسته‌های استارز رو انتخاب کن:", reply_markup=kb.category_menu("stars", products))
+    text = (
+        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n"
+        "<b>خرید استارز تلگرام</b>\n"
+        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n\n"
+        "یکی از بسته‌های زیر رو انتخاب کن، تحویل آنیه:"
+    )
+    await call.message.edit_text(text, reply_markup=kb.category_menu("stars", products))
     await call.answer()
 
 
 @router.callback_query(F.data == "menu_gift")
 async def cb_gift(call: CallbackQuery):
-    await call.message.edit_text("🎁 کدوم نوع گیفت رو می‌خوای؟", reply_markup=kb.gift_type_menu())
+    text = (
+        "🎁 ━━━━━━━━━━━━━━ 🎁\n"
+        "<b>خرید گیفت تلگرام</b>\n"
+        "🎁 ━━━━━━━━━━━━━━ 🎁\n\n"
+        "با ارسال گیفت، لبخند رو به دوستات هدیه بده 💫\n"
+        "کدوم دسته رو می‌خوای؟"
+    )
+    await call.message.edit_text(text, reply_markup=kb.gift_type_menu())
     await call.answer()
 
 
 @router.callback_query(F.data == "menu_gift_special")
 async def cb_gift_special(call: CallbackQuery):
     products = await db.get_products("gift_special")
+    text = (
+        "🎊 <b>گیفت های مناسبتی</b> 🎊\n\n"
+        "مخصوص کریسمس، ولنتاین و مناسبت‌های خاص 🎄💝\n"
+        "لطفاً گیفت مورد نظرت رو انتخاب کن:"
+    )
     await call.message.edit_text(
-        "🎊 گیفت های مناسبتی\nلطفاً گیفت مورد نظر خود را انتخاب کنید:",
+        text,
         reply_markup=kb.category_menu("gift_special", products, back_target="menu_gift")
     )
     await call.answer()
@@ -150,8 +176,13 @@ async def cb_gift_special(call: CallbackQuery):
 @router.callback_query(F.data == "menu_gift_normal")
 async def cb_gift_normal(call: CallbackQuery):
     products = await db.get_products("gift_normal")
+    text = (
+        "🧸 <b>گیفت های عادی</b> 🧸\n\n"
+        "گیفت‌های محبوب برای هر روز 🎂🌹\n"
+        "لطفاً گیفت مورد نظرت رو انتخاب کن:"
+    )
     await call.message.edit_text(
-        "🧸 گیفت های عادی\nلطفاً گیفت مورد نظر خود را انتخاب کنید:",
+        text,
         reply_markup=kb.category_menu("gift_normal", products, back_target="menu_gift")
     )
     await call.answer()
@@ -160,7 +191,14 @@ async def cb_gift_normal(call: CallbackQuery):
 @router.callback_query(F.data == "menu_premium")
 async def cb_premium(call: CallbackQuery):
     products = await db.get_products("premium")
-    await call.message.edit_text("⭐ یکی از پلن‌های پرمیوم رو انتخاب کن:", reply_markup=kb.category_menu("premium", products))
+    text = (
+        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n"
+        "<b>خرید پرمیوم تلگرام</b>\n"
+        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n\n"
+        "با پرمیوم به امکانات ویژه تلگرام دسترسی پیدا کن 🚀\n"
+        "یکی از پلن‌ها رو انتخاب کن:"
+    )
+    await call.message.edit_text(text, reply_markup=kb.category_menu("premium", products))
     await call.answer()
 
 
@@ -175,9 +213,12 @@ async def cb_item_selected(call: CallbackQuery):
 
     _, category, name, price = product
     text = (
-        f"🧾 <b>{name}</b>\n"
-        f"قیمت: <b>{price:,}</b> تومان\n\n"
-        "برای تکمیل خرید، مبلغ از کیف پول شما کسر میشه. اگر موجودی کافی نداری اول باید حساب رو شارژ کنی."
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n"
+        f"<b>{name}</b>\n"
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n\n"
+        f"💰 قیمت: <b>{price:,}</b> تومان\n\n"
+        "برای تکمیل خرید، مبلغ از کیف پولت کسر میشه.\n"
+        "اگه موجودی کافی نداری، اول از «💳 افزایش موجودی» شارژ کن."
     )
     await call.message.edit_text(text, reply_markup=kb.confirm_purchase(product_id))
     await call.answer()
@@ -203,11 +244,14 @@ async def cb_confirm_purchase(call: CallbackQuery, bot: Bot):
     order_id = await db.create_order(call.from_user.id, kb.CATEGORY_LABELS.get(category, category), name, price)
 
     await call.message.edit_text(
-        f"✅ سفارش شما ثبت شد!\n\n"
-        f"شماره سفارش: <code>{order_id}</code>\n"
-        f"آیتم: {name}\n"
-        f"مبلغ: {price:,} تومان\n\n"
-        "تیم پشتیبانی به‌زودی سفارش رو پردازش می‌کنه. وضعیتش رو از بخش «📦 پیگیری سفارش» ببین.",
+        "✅ ━━━━━━━━━━━━━━ ✅\n"
+        "<b>سفارش شما با موفقیت ثبت شد!</b>\n"
+        "✅ ━━━━━━━━━━━━━━ ✅\n\n"
+        f"🔖 شماره سفارش: <code>{order_id}</code>\n"
+        f"🎁 آیتم: {name}\n"
+        f"💰 مبلغ: {price:,} تومان\n\n"
+        "⏳ تیم پشتیبانی به‌زودی سفارش رو پردازش می‌کنه.\n"
+        "وضعیتش رو از «📦 پیگیری سفارش» چک کن.",
         reply_markup=kb.back_button().as_markup()
     )
     await call.answer("سفارش ثبت شد ✅")
@@ -232,10 +276,12 @@ async def cb_account(call: CallbackQuery):
     ref_count = await db.count_referrals(call.from_user.id)
 
     text = (
-        f"👤 <b>حساب کاربری</b>\n\n"
-        f"آیدی عددی: <code>{call.from_user.id}</code>\n"
-        f"موجودی کیف پول: <b>{balance:,}</b> تومان\n"
-        f"تعداد زیرمجموعه‌ها: <b>{ref_count}</b> نفر"
+        "👤 ━━━━━━━━━━━━━━ 👤\n"
+        "<b>حساب کاربری شما</b>\n"
+        "👤 ━━━━━━━━━━━━━━ 👤\n\n"
+        f"🆔 آیدی عددی: <code>{call.from_user.id}</code>\n"
+        f"💰 موجودی کیف پول: <b>{balance:,}</b> تومان\n"
+        f"👥 تعداد زیرمجموعه‌ها: <b>{ref_count}</b> نفر"
     )
     await call.message.edit_text(text, reply_markup=kb.back_button().as_markup())
     await call.answer()
@@ -248,10 +294,12 @@ async def cb_referral(call: CallbackQuery, bot: Bot):
     link = f"https://t.me/{me.username}?start=ref{call.from_user.id}"
     ref_count = await db.count_referrals(call.from_user.id)
     text = (
-        "🔗 <b>سیستم زیرمجموعه‌گیری</b>\n\n"
-        "لینک اختصاصی خودتو به دوستات بفرست و با هر عضویت جایزه بگیر!\n\n"
-        f"لینک شما:\n<code>{link}</code>\n\n"
-        f"تعداد زیرمجموعه‌ها: {ref_count} نفر"
+        "🔗 ━━━━━━━━━━━━━━ 🔗\n"
+        "<b>سیستم زیرمجموعه‌گیری</b>\n"
+        "🔗 ━━━━━━━━━━━━━━ 🔗\n\n"
+        "💸 لینک اختصاصی خودتو به دوستات بفرست و با هر عضویت جایزه بگیر!\n\n"
+        f"🔗 لینک شما:\n<code>{link}</code>\n\n"
+        f"👥 تعداد زیرمجموعه‌ها: <b>{ref_count}</b> نفر"
     )
     await call.message.edit_text(text, reply_markup=kb.back_button().as_markup())
     await call.answer()
@@ -262,12 +310,12 @@ async def cb_referral(call: CallbackQuery, bot: Bot):
 async def cb_orders(call: CallbackQuery):
     orders = await db.get_user_orders(call.from_user.id)
     if not orders:
-        text = "📦 هنوز هیچ سفارشی ثبت نکردی."
+        text = "📦 هنوز هیچ سفارشی ثبت نکردی.\n\nاز منوی اصلی یه خرید انجام بده تا اینجا نمایش داده بشه 🛍"
     else:
         status_map = {"pending": "⏳ در حال پردازش", "done": "✅ انجام‌شده", "cancelled": "❌ لغو‌شده"}
-        lines = ["📦 <b>سفارش‌های اخیر شما</b>\n"]
+        lines = ["📦 ━━━━━━━━━━━━━━ 📦", "<b>سفارش‌های اخیر شما</b>", "📦 ━━━━━━━━━━━━━━ 📦\n"]
         for order_id, category, item, price, status, created_at in orders:
-            lines.append(f"• {item} - {price:,} تومان - {status_map.get(status, status)} - <code>{order_id}</code>")
+            lines.append(f"🔸 {item} — {price:,} تومان\n{status_map.get(status, status)} | <code>{order_id}</code>\n")
         text = "\n".join(lines)
     await call.message.edit_text(text, reply_markup=kb.back_button().as_markup())
     await call.answer()
@@ -277,8 +325,10 @@ async def cb_orders(call: CallbackQuery):
 @router.callback_query(F.data == "menu_support")
 async def cb_support(call: CallbackQuery):
     text = (
-        "🆘 <b>پشتیبانی</b>\n\n"
-        "برای هرگونه سوال یا مشکل، پیام خودتو همینجا برای ما بفرست، به زودی جواب می‌گیری.\n"
+        "🆘 ━━━━━━━━━━━━━━ 🆘\n"
+        "<b>پشتیبانی</b>\n"
+        "🆘 ━━━━━━━━━━━━━━ 🆘\n\n"
+        "برای هرگونه سوال یا مشکل، پیامتو همینجا برامون بفرست، به‌زودی جواب می‌گیری 💬\n\n"
         "یا مستقیم با ادمین در ارتباط باش: @YourSupportUsername"
     )
     await call.message.edit_text(text, reply_markup=kb.back_button().as_markup())
@@ -288,7 +338,13 @@ async def cb_support(call: CallbackQuery):
 # ---------------- افزایش موجودی ----------------
 @router.callback_query(F.data == "menu_charge")
 async def cb_charge_menu(call: CallbackQuery):
-    await call.message.edit_text("💳 روش افزایش موجودی رو انتخاب کن:", reply_markup=kb.charge_menu())
+    text = (
+        "💳 ━━━━━━━━━━━━━━ 💳\n"
+        "<b>افزایش موجودی کیف پول</b>\n"
+        "💳 ━━━━━━━━━━━━━━ 💳\n\n"
+        "روش دلخواهت رو انتخاب کن:"
+    )
+    await call.message.edit_text(text, reply_markup=kb.charge_menu())
     await call.answer()
 
 
@@ -300,11 +356,11 @@ async def cb_charge_gateway(call: CallbackQuery):
 @router.callback_query(F.data == "charge_card")
 async def cb_charge_card(call: CallbackQuery, state: FSMContext):
     text = (
-        "💳 <b>افزایش موجودی - کارت به کارت</b>\n\n"
+        "💳 <b>افزایش موجودی — کارت به کارت</b>\n\n"
         f"مبلغ دلخواه رو به شماره کارت زیر واریز کن:\n\n"
-        f"<code>{config.CARD_NUMBER}</code>\n"
-        f"به نام: {config.CARD_HOLDER}\n\n"
-        "بعد از واریز، مبلغ واریزی رو به عدد (تومان) اینجا بفرست."
+        f"💳 <code>{config.CARD_NUMBER}</code>\n"
+        f"👤 به نام: {config.CARD_HOLDER}\n\n"
+        "📸 بعد از واریز، مبلغ واریزی رو به عدد (تومان) اینجا بفرست."
     )
     await call.message.edit_text(text, reply_markup=kb.back_button().as_markup())
     await state.set_state(ChargeState.waiting_amount)
