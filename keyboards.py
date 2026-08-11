@@ -3,7 +3,8 @@ from aiogram.types import InlineKeyboardMarkup
 
 CATEGORY_LABELS = {
     "stars": "استارز",
-    "gift": "گیفت",
+    "gift_special": "گیفت‌های مناسبتی",
+    "gift_normal": "گیفت‌های عادی",
     "premium": "پرمیوم",
 }
 
@@ -32,12 +33,22 @@ def back_button(target="menu_main") -> InlineKeyboardBuilder:
     return b
 
 
+# ---------- زیرمنوی گیفت: انتخاب مناسبتی/عادی ----------
+def gift_type_menu() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="🎊 گیفت های مناسبتی", callback_data="menu_gift_special")
+    b.button(text="🧸 گیفت های عادی", callback_data="menu_gift_normal")
+    b.button(text="🔙 بازگشت", callback_data="menu_main")
+    b.adjust(1)
+    return b.as_markup()
+
+
 # ---------- زیرمنوی خرید (ساخته‌شده از روی محصولات دیتابیس) ----------
-def category_menu(category: str, products) -> InlineKeyboardMarkup:
+def category_menu(category: str, products, back_target="menu_main") -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for product_id, name, price in products:
         b.button(text=f"{name} - {price:,} تومان", callback_data=f"item_{product_id}")
-    b.button(text="🔙 بازگشت", callback_data="menu_main")
+    b.button(text="🔙 بازگشت", callback_data=back_target)
     b.adjust(1)
     return b.as_markup()
 
@@ -83,7 +94,8 @@ def admin_order_actions(order_id: str) -> InlineKeyboardMarkup:
 def admin_panel_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="⭐ مدیریت استارز", callback_data="admincat_stars")
-    b.button(text="🎁 مدیریت گیفت", callback_data="admincat_gift")
+    b.button(text="🎊 مدیریت گیفت مناسبتی", callback_data="admincat_gift_special")
+    b.button(text="🧸 مدیریت گیفت عادی", callback_data="admincat_gift_normal")
     b.button(text="⭐ مدیریت پرمیوم", callback_data="admincat_premium")
     b.button(text="🔙 بازگشت", callback_data="menu_main")
     b.adjust(1)
