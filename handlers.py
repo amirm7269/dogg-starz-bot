@@ -29,27 +29,26 @@ DAILY_CHARGE_LIMIT = 500_000  # سقف مجاز واریز روزانه بدون
 
 KYC_INSTRUCTIONS = (
     "⚠️ <b>مبلغی که وارد کردی بیشتر از سقف مجاز روزانه (500,000 تومان) هست.</b>\n\n"
-    "برای واریزهای بالای این سقف، برای جلوگیری از کلاهبرداری، نیاز به احراز هویت داری. مدارک لازم:\n\n"
+    "برای واریزهای بالای این سقف، برای جلوگیری از کلاهبرداری، نیاز به احراز هویت داری (فقط یک‌بار، برای همیشه). مدارک لازم:\n\n"
+    "📱 شماره تلفن اکانتت\n"
     "1️⃣ عکس روی کارتی که باهاش واریز می‌کنی\n"
     "2️⃣ عکس شناسنامه (یا کارت ملی) دارنده‌ی همون کارت\n"
     "3️⃣ یه ویدیوی کوتاه از همون فرد (که عکسش توی شناسنامه هست) در حالی که می‌گه:\n"
-    "«بنده در حال خرید از فروشگاه داگ استارز هستم»\n\n"
-    "لطفاً اول 📸 عکس کارتت رو بفرست:"
+    "«بنده در حال خرید از فروشگاه داگ استارز هستم»"
 )
 
 
 class ChargeState(StatesGroup):
     waiting_amount = State()
-    waiting_card_photo = State()   # data: amount
-    waiting_phone = State()        # data: amount, card_photo_id
-    waiting_receipt = State()      # data: amount, card_photo_id, phone
+    waiting_phone = State()        # data: amount
+    waiting_receipt = State()      # data: amount, phone
 
 
 class KycState(StatesGroup):
-    waiting_card_photo = State()   # data: amount
-    waiting_id_photo = State()     # data: amount, card_photo_id
-    waiting_video = State()        # data: amount, card_photo_id, id_photo_id
-    waiting_receipt = State()      # data: amount, card_photo_id, id_photo_id, video_id
+    waiting_phone = State()        # data: amount
+    waiting_card_photo = State()   # data: amount, phone
+    waiting_id_photo = State()     # data: amount, phone, card_photo_id
+    waiting_video = State()        # data: amount, phone, card_photo_id, id_photo_id
 
 
 class AdminState(StatesGroup):
@@ -525,6 +524,21 @@ async def cb_charge_card(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
+def _is_iranian_phone(phone: str) -> bool:
+    if not phone:
+        return False
+    cleaned = phone.strip().replace(" ", "").replace("+", "")
+    return cleaned.startswith("98") and len(cleaned) >= 11
+
+
+def _contact_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📱 ارسال شماره تلفنم", request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+
 @router.message(ChargeState.waiting_amount)
 async def receive_charge_amount(message: Message, state: FSMContext):
     if not message.text or not message.text.strip().isdigit():
@@ -532,66 +546,66 @@ async def receive_charge_amount(message: Message, state: FSMContext):
         return
     amount = int(message.text.strip())
 
-    if amount > DAILY_CHARGE_LIMIT:
+    user = await db.get_user(message.from_user.id)
+    already_verified = bool(user[5]) if user else False
+
+    if amount > DAILY_CHARGE_LIMIT and not already_verified:
         await state.update_data(amount=amount)
-        await state.set_state(KycState.waiting_card_photo)
+        await state.set_state(KycState.waiting_phone)
         await message.answer(KYC_INSTRUCTIONS)
+        await message.answer(
+            "📱 اول لطفاً با دکمه‌ی زیر، شماره تلفن اکانتت رو بفرست:",
+            reply_markup=_contact_keyboard()
+        )
         return
 
     await state.update_data(amount=amount)
-    await state.set_state(ChargeState.waiting_card_photo)
-    text = (
-        f"مبلغ رو به شماره کارت زیر واریز کن:\n\n"
-        f"💳 <code>{config.CARD_NUMBER}</code>\n"
-        f"👤 به نام: {config.CARD_HOLDER}\n\n"
-        "📸 حالا برای جلوگیری از کلاهبرداری، عکس روی کارتی که باهاش واریز می‌کنی رو بفرست:"
-    )
-    await message.answer(text)
-
-
-@router.message(ChargeState.waiting_card_photo, F.photo)
-async def receive_charge_card_photo(message: Message, state: FSMContext):
-    await state.update_data(card_photo_id=message.photo[-1].file_id)
     await state.set_state(ChargeState.waiting_phone)
-
-    contact_kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📱 ارسال شماره تلفنم", request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
     await message.answer(
-        "📱 حالا لطفاً با دکمه‌ی زیر، شماره تلفن اکانتی که باهاش داری خرید می‌کنی رو برامون بفرست:",
-        reply_markup=contact_kb
+        "📱 لطفاً با دکمه‌ی زیر، شماره تلفن اکانتی که باهاش داری خرید می‌کنی رو برامون بفرست:",
+        reply_markup=_contact_keyboard()
     )
-
-
-@router.message(ChargeState.waiting_card_photo)
-async def receive_charge_card_photo_wrong(message: Message):
-    await message.answer("لطفاً عکس کارتت رو ارسال کن 📸")
 
 
 @router.message(ChargeState.waiting_phone, F.contact)
 async def receive_charge_phone(message: Message, state: FSMContext):
-    await state.update_data(phone=message.contact.phone_number)
+    phone = message.contact.phone_number
+    if not _is_iranian_phone(phone):
+        await message.answer(
+            "⚠️ فقط شماره‌های ایرانی (با پیش‌شماره 98) قابل قبوله. لطفاً با یه اکانت با شماره ایرانی امتحان کن.",
+            reply_markup=_contact_keyboard()
+        )
+        return
+
+    data = await state.get_data()
+    amount = data.get("amount", 0)
+    await state.update_data(phone=phone)
     await state.set_state(ChargeState.waiting_receipt)
-    await message.answer(
-        "✅ شماره دریافت شد.\n\n📸 حالا عکس رسید واریزی رو بفرست:",
-        reply_markup=ReplyKeyboardRemove()
+
+    text = (
+        f"✅ شماره ثبت شد.\n\n"
+        f"مبلغ {amount:,} تومان رو به شماره کارت زیر واریز کن:\n\n"
+        f"💳 <code>{config.CARD_NUMBER}</code>\n"
+        f"👤 به نام: {config.CARD_HOLDER}\n\n"
+        "📸 حالا عکس رسید واریزی رو بفرست:"
     )
+    await message.answer(text, reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(ChargeState.waiting_phone)
 async def receive_charge_phone_wrong(message: Message):
-    await message.answer("لطفاً از دکمه‌ی «📱 ارسال شماره تلفنم» استفاده کن تا شماره‌ت ثبت بشه.")
+    await message.answer(
+        "لطفاً از دکمه‌ی «📱 ارسال شماره تلفنم» استفاده کن تا شماره‌ت ثبت بشه.",
+        reply_markup=_contact_keyboard()
+    )
 
 
 @router.message(ChargeState.waiting_receipt, F.photo)
 async def receive_charge_receipt(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     amount = data.get("amount", 0)
-    card_photo_id = data.get("card_photo_id")
     phone = data.get("phone", "نامشخص")
-    request_id = await db.create_charge_request(message.from_user.id, amount)
+    request_id = await db.create_charge_request(message.from_user.id, amount, phone=phone, kind="normal")
     await state.clear()
 
     await message.answer(
@@ -602,18 +616,16 @@ async def receive_charge_receipt(message: Message, state: FSMContext, bot: Bot):
 
     target_chat = config.CHARGE_CHANNEL_ID if config.CHARGE_CHANNEL_ID else config.ADMIN_ID
     if target_chat:
-        media = [
-            InputMediaPhoto(media=card_photo_id, caption="📸 عکس کارت واریزی"),
-            InputMediaPhoto(media=message.photo[-1].file_id, caption="🧾 رسید واریز"),
-        ]
-        await bot.send_media_group(target_chat, media=media)
-        await bot.send_message(
+        await bot.send_photo(
             target_chat,
-            f"🆕 درخواست شارژ جدید\n"
-            f"کاربر: {message.from_user.id} (@{message.from_user.username})\n"
-            f"📱 شماره تلفن: {phone}\n"
-            f"💰 مبلغ: {amount:,} تومان\n"
-            f"شماره پیگیری: {request_id}",
+            photo=message.photo[-1].file_id,
+            caption=(
+                f"🆕 درخواست شارژ جدید\n"
+                f"کاربر: {message.from_user.id} (@{message.from_user.username})\n"
+                f"📱 شماره تلفن: {phone}\n"
+                f"💰 مبلغ: {amount:,} تومان\n"
+                f"شماره پیگیری: {request_id}"
+            ),
             reply_markup=kb.admin_charge_actions(request_id)
         )
 
@@ -623,7 +635,29 @@ async def receive_charge_receipt_wrong(message: Message):
     await message.answer("لطفاً عکس رسید واریزی رو ارسال کن 📸")
 
 
-# ---------------- احراز هویت برای واریزهای بالای سقف روزانه ----------------
+# ---------------- احراز هویت برای واریزهای بالای سقف روزانه (فقط یک‌بار برای هر اکانت) ----------------
+@router.message(KycState.waiting_phone, F.contact)
+async def kyc_receive_phone(message: Message, state: FSMContext):
+    phone = message.contact.phone_number
+    if not _is_iranian_phone(phone):
+        await message.answer(
+            "⚠️ فقط شماره‌های ایرانی (با پیش‌شماره 98) قابل قبوله. لطفاً با یه اکانت با شماره ایرانی امتحان کن.",
+            reply_markup=_contact_keyboard()
+        )
+        return
+    await state.update_data(phone=phone)
+    await state.set_state(KycState.waiting_card_photo)
+    await message.answer("1️⃣ حالا عکس روی کارتی که باهاش واریز می‌کنی رو بفرست:", reply_markup=ReplyKeyboardRemove())
+
+
+@router.message(KycState.waiting_phone)
+async def kyc_phone_wrong(message: Message):
+    await message.answer(
+        "لطفاً از دکمه‌ی «📱 ارسال شماره تلفنم» استفاده کن.",
+        reply_markup=_contact_keyboard()
+    )
+
+
 @router.message(KycState.waiting_card_photo, F.photo)
 async def kyc_receive_card_photo(message: Message, state: FSMContext):
     await state.update_data(card_photo_id=message.photo[-1].file_id)
@@ -652,38 +686,23 @@ async def kyc_id_photo_wrong(message: Message):
 
 
 @router.message(KycState.waiting_video, F.video)
-async def kyc_receive_video(message: Message, state: FSMContext):
-    await state.update_data(video_id=message.video.file_id)
-    await state.set_state(KycState.waiting_receipt)
-    text = (
-        f"✅ مدارک احراز هویت دریافت شد.\n\n"
-        f"حالا مبلغ رو به شماره کارت زیر واریز کن و عکس رسیدش رو بفرست:\n\n"
-        f"💳 <code>{config.CARD_NUMBER}</code>\n"
-        f"👤 به نام: {config.CARD_HOLDER}\n\n"
-        "📸 عکس رسید واریزی:"
-    )
-    await message.answer(text)
-
-
-@router.message(KycState.waiting_video)
-async def kyc_video_wrong(message: Message):
-    await message.answer("لطفاً یه ویدیو ارسال کن 🎥")
-
-
-@router.message(KycState.waiting_receipt, F.photo)
-async def kyc_receive_receipt(message: Message, state: FSMContext, bot: Bot):
+async def kyc_receive_video(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     amount = data.get("amount", 0)
+    phone = data.get("phone", "نامشخص")
     card_photo_id = data.get("card_photo_id")
     id_photo_id = data.get("id_photo_id")
-    video_id = data.get("video_id")
-    request_id = await db.create_charge_request(message.from_user.id, amount)
+    video_id = message.video.file_id
+
+    request_id = await db.create_charge_request(
+        message.from_user.id, amount, phone=phone, kind="kyc", status="pending_kyc"
+    )
     await state.clear()
 
     await message.answer(
-        f"✅ درخواست شارژ و احراز هویت شما ثبت شد.\n"
-        f"شماره پیگیری: <code>{request_id}</code>\n"
-        "بعد از بررسی و تایید ادمین، موجودی حسابت اضافه میشه."
+        "✅ مدارک احراز هویت شما ثبت شد و برای بررسی ارسال شد.\n"
+        f"شماره پیگیری: <code>{request_id}</code>\n\n"
+        "بعد از تایید، شماره کارت برات ارسال میشه تا واریز رو انجام بدی."
     )
 
     target_chat = config.KYC_CHANNEL_ID if config.KYC_CHANNEL_ID else config.ADMIN_ID
@@ -692,23 +711,103 @@ async def kyc_receive_receipt(message: Message, state: FSMContext, bot: Bot):
             InputMediaPhoto(media=card_photo_id, caption="📸 عکس کارت واریزی"),
             InputMediaPhoto(media=id_photo_id, caption="🪪 عکس شناسنامه/کارت ملی"),
             InputMediaVideo(media=video_id, caption="🎥 ویدیوی احراز هویت"),
-            InputMediaPhoto(media=message.photo[-1].file_id, caption="🧾 رسید واریز"),
         ]
         await bot.send_media_group(target_chat, media=media)
         await bot.send_message(
             target_chat,
-            f"🆕 درخواست احراز هویت + شارژ (بالای سقف روزانه)\n"
+            f"🆕 درخواست احراز هویت (واریز بالای سقف روزانه)\n"
             f"کاربر: {message.from_user.id} (@{message.from_user.username})\n"
-            f"💰 مبلغ: {amount:,} تومان\n"
+            f"📱 شماره تلفن: {phone}\n"
+            f"💰 مبلغ درخواستی: {amount:,} تومان\n"
             f"شماره پیگیری: {request_id}\n\n"
             "⚠️ لطفاً مدارک بالا رو با دقت بررسی کن.",
+            reply_markup=kb.admin_kyc_actions(request_id)
+        )
+
+
+@router.message(KycState.waiting_video)
+async def kyc_video_wrong(message: Message):
+    await message.answer("لطفاً یه ویدیو ارسال کن 🎥")
+
+
+# ---------------- دریافت رسید بعد از تایید احراز هویت (بدون نیاز به وضعیت خاص) ----------------
+@router.message(F.photo)
+async def receive_pending_kyc_receipt(message: Message, bot: Bot, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is not None:
+        return  # این پیام قراره توسط هندلر state-دار دیگه‌ای مدیریت بشه
+
+    pending = await db.get_awaiting_receipt(message.from_user.id)
+    if not pending:
+        return
+
+    request_id, user_id, amount, status, phone, kind = pending
+    await db.set_charge_status(request_id, "pending")
+
+    await message.answer(
+        f"✅ رسید دریافت شد و برای تایید ارسال شد.\n"
+        f"شماره پیگیری: <code>{request_id}</code>"
+    )
+
+    target_chat = config.CHARGE_CHANNEL_ID if config.CHARGE_CHANNEL_ID else config.ADMIN_ID
+    if target_chat:
+        await bot.send_photo(
+            target_chat,
+            photo=message.photo[-1].file_id,
+            caption=(
+                f"🆕 رسید واریز (بعد از احراز هویت)\n"
+                f"کاربر: {message.from_user.id} (@{message.from_user.username})\n"
+                f"📱 شماره تلفن: {phone}\n"
+                f"💰 مبلغ: {amount:,} تومان\n"
+                f"شماره پیگیری: {request_id}"
+            ),
             reply_markup=kb.admin_charge_actions(request_id)
         )
 
 
-@router.message(KycState.waiting_receipt)
-async def kyc_receipt_wrong(message: Message):
-    await message.answer("لطفاً عکس رسید واریزی رو ارسال کن 📸")
+# ---------------- اکشن‌های ادمین: تایید/رد احراز هویت ----------------
+@router.callback_query(F.data.startswith("adminkyc_"))
+async def cb_admin_kyc_action(call: CallbackQuery, bot: Bot):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+
+    action = call.data.split("_", 2)[1]
+    request_id = call.data.split("_", 2)[2]
+    req = await db.get_charge_request(request_id)
+    if not req:
+        await call.answer("درخواست پیدا نشد.", show_alert=True)
+        return
+
+    request_id, user_id, amount, status, phone, kind = req
+    if status != "pending_kyc":
+        await call.answer("قبلاً بررسی شده.", show_alert=True)
+        return
+
+    if action == "ok":
+        await db.set_kyc_verified(user_id, True)
+        await db.set_charge_status(request_id, "awaiting_receipt")
+        try:
+            await call.message.edit_text(call.message.text + "\n\n✅ احراز هویت تایید شد.")
+        except Exception:
+            pass
+        await bot.send_message(
+            user_id,
+            "✅ <b>احراز هویت شما تایید شد!</b>\n\n"
+            f"حالا مبلغ {amount:,} تومان رو به شماره کارت زیر واریز کن:\n\n"
+            f"💳 <code>{config.CARD_NUMBER}</code>\n"
+            f"👤 به نام: {config.CARD_HOLDER}\n\n"
+            "📸 بعد از واریز، عکس رسید رو همینجا بفرست."
+        )
+    else:
+        await db.set_charge_status(request_id, "rejected")
+        try:
+            await call.message.edit_text(call.message.text + "\n\n❌ احراز هویت رد شد.")
+        except Exception:
+            pass
+        await bot.send_message(user_id, "❌ متاسفانه احراز هویت شما تایید نشد. با پشتیبانی در ارتباط باش.")
+
+    await call.answer()
 
 
 # ---------------- اکشن‌های ادمین: تایید/رد شارژ ----------------
@@ -725,23 +824,32 @@ async def cb_admin_charge_action(call: CallbackQuery, bot: Bot):
         await call.answer("درخواست پیدا نشد.", show_alert=True)
         return
 
-    _, user_id, amount, status = req
+    _, user_id, amount, status, phone, kind = req
     if status != "pending":
         await call.answer("قبلاً بررسی شده.", show_alert=True)
         return
+
+    async def _append_note(note):
+        try:
+            if call.message.photo:
+                await call.message.edit_caption(caption=(call.message.caption or "") + note)
+            else:
+                await call.message.edit_text((call.message.text or "") + note)
+        except Exception:
+            pass
 
     if action == "ok":
         await db.update_balance(user_id, amount)
         await db.set_charge_status(request_id, "approved")
         try:
-            await call.message.edit_text(call.message.text + "\n\n✅ تایید شد و موجودی اضافه شد.")
+            await _append_note("\n\n✅ تایید شد و موجودی اضافه شد.")
         except Exception:
             pass
         await bot.send_message(user_id, f"✅ شارژ حساب شما به مبلغ {amount:,} تومان تایید شد.")
     else:
         await db.set_charge_status(request_id, "rejected")
         try:
-            await call.message.edit_text(call.message.text + "\n\n❌ رد شد.")
+            await _append_note("\n\n❌ رد شد.")
         except Exception:
             pass
         await bot.send_message(user_id, "❌ متاسفانه درخواست شارژ شما تایید نشد. با پشتیبانی در ارتباط باش.")
