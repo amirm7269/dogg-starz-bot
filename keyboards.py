@@ -92,6 +92,15 @@ def admin_charge_actions(request_id: str) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+# ---------- پنل ادمین برای تایید احراز هویت ----------
+def admin_kyc_actions(request_id: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ تایید احراز هویت", callback_data=f"adminkyc_ok_{request_id}")
+    b.button(text="❌ رد احراز هویت", callback_data=f"adminkyc_no_{request_id}")
+    b.adjust(2)
+    return b.as_markup()
+
+
 # ---------- پنل ادمین برای تایید سفارش ----------
 def admin_order_actions(order_id: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
