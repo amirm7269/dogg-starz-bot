@@ -108,7 +108,27 @@ def admin_panel_menu() -> InlineKeyboardMarkup:
     b.button(text="🎊 مدیریت گیفت مناسبتی", callback_data="admincat_gift_special")
     b.button(text="🧸 مدیریت گیفت عادی", callback_data="admincat_gift_normal")
     b.button(text="⭐ مدیریت پرمیوم", callback_data="admincat_premium")
+    b.button(text="📝 مدیریت متن‌های ربات", callback_data="admin_texts")
     b.button(text="🔙 بازگشت", callback_data="menu_main")
+    b.adjust(1)
+    return b.as_markup()
+
+
+# ---------- مدیریت متن‌های ربات ----------
+def admin_texts_menu(text_labels: dict) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for key, label in text_labels.items():
+        b.button(text=label, callback_data=f"admintext_{key}")
+    b.button(text="🔙 بازگشت", callback_data="admin_panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_text_view_actions(key: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✏️ ویرایش این متن", callback_data=f"admintextedit_{key}")
+    b.button(text="♻️ بازگردانی به پیش‌فرض", callback_data=f"admintextreset_{key}")
+    b.button(text="🔙 بازگشت به لیست متن‌ها", callback_data="admin_texts")
     b.adjust(1)
     return b.as_markup()
 
