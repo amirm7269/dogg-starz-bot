@@ -27,6 +27,7 @@ async def init_db():
             )
         """)
         await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_verified BOOLEAN DEFAULT FALSE")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT")
 
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS orders (
@@ -50,6 +51,18 @@ async def init_db():
         """)
         await conn.execute("ALTER TABLE charge_requests ADD COLUMN IF NOT EXISTS phone TEXT")
         await conn.execute("ALTER TABLE charge_requests ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'normal'")
+        await conn.execute("ALTER TABLE charge_requests ADD COLUMN IF NOT EXISTS card_number TEXT")
+        await conn.execute("ALTER TABLE charge_requests ADD COLUMN IF NOT EXISTS card_photo_id TEXT")
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_cards (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                card_number TEXT,
+                card_photo_id TEXT,
+                created_at TEXT
+            )
+        """)
 
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS products (
@@ -164,16 +177,22 @@ async def get_user(user_id: int):
     pool = await _get_pool()
     async with pool.acquire() as conn:
         r = await conn.fetchrow(
-            "SELECT user_id, username, balance, referrer_id, joined_at, kyc_verified FROM users WHERE user_id = $1",
+            "SELECT user_id, username, balance, referrer_id, joined_at, kyc_verified, phone FROM users WHERE user_id = $1",
             user_id
         )
-        return (r["user_id"], r["username"], r["balance"], r["referrer_id"], r["joined_at"], r["kyc_verified"]) if r else None
+        return (r["user_id"], r["username"], r["balance"], r["referrer_id"], r["joined_at"], r["kyc_verified"], r["phone"]) if r else None
 
 
 async def set_kyc_verified(user_id: int, verified: bool = True):
     pool = await _get_pool()
     async with pool.acquire() as conn:
         await conn.execute("UPDATE users SET kyc_verified = $1 WHERE user_id = $2", verified, user_id)
+
+
+async def set_user_phone(user_id: int, phone: str):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE users SET phone = $1 WHERE user_id = $2", phone, user_id)
 
 
 async def update_balance(user_id: int, delta: int):
@@ -219,14 +238,15 @@ async def get_order(order_id: str):
         return (r["order_id"], r["user_id"], r["category"], r["item"], r["price"], r["status"]) if r else None
 
 
-async def create_charge_request(user_id: int, amount: int, phone: str = None, kind: str = "normal", status: str = "pending"):
+async def create_charge_request(user_id: int, amount: int, phone: str = None, kind: str = "normal",
+                                  status: str = "pending", card_number: str = None, card_photo_id: str = None):
     request_id = _gen_id("CHG")
     pool = await _get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
-            "INSERT INTO charge_requests (request_id, user_id, amount, status, created_at, phone, kind) "
-            "VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            request_id, user_id, amount, status, datetime.datetime.utcnow().isoformat(), phone, kind
+            "INSERT INTO charge_requests (request_id, user_id, amount, status, created_at, phone, kind, card_number, card_photo_id) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            request_id, user_id, amount, status, datetime.datetime.utcnow().isoformat(), phone, kind, card_number, card_photo_id
         )
     return request_id
 
@@ -235,10 +255,12 @@ async def get_charge_request(request_id: str):
     pool = await _get_pool()
     async with pool.acquire() as conn:
         r = await conn.fetchrow(
-            "SELECT request_id, user_id, amount, status, phone, kind FROM charge_requests WHERE request_id = $1",
+            "SELECT request_id, user_id, amount, status, phone, kind, card_number, card_photo_id FROM charge_requests WHERE request_id = $1",
             request_id
         )
-        return (r["request_id"], r["user_id"], r["amount"], r["status"], r["phone"], r["kind"]) if r else None
+        if not r:
+            return None
+        return (r["request_id"], r["user_id"], r["amount"], r["status"], r["phone"], r["kind"], r["card_number"], r["card_photo_id"])
 
 
 async def get_awaiting_receipt(user_id: int):
@@ -246,11 +268,43 @@ async def get_awaiting_receipt(user_id: int):
     pool = await _get_pool()
     async with pool.acquire() as conn:
         r = await conn.fetchrow(
-            "SELECT request_id, user_id, amount, status, phone, kind FROM charge_requests "
+            "SELECT request_id, user_id, amount, status, phone, kind, card_number, card_photo_id FROM charge_requests "
             "WHERE user_id = $1 AND status = 'awaiting_receipt' ORDER BY created_at DESC LIMIT 1",
             user_id
         )
-        return (r["request_id"], r["user_id"], r["amount"], r["status"], r["phone"], r["kind"]) if r else None
+        if not r:
+            return None
+        return (r["request_id"], r["user_id"], r["amount"], r["status"], r["phone"], r["kind"], r["card_number"], r["card_photo_id"])
+
+
+async def add_user_card(user_id: int, card_number: str, card_photo_id: str):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        new_id = await conn.fetchval(
+            "INSERT INTO user_cards (user_id, card_number, card_photo_id, created_at) VALUES ($1, $2, $3, $4) RETURNING id",
+            user_id, card_number, card_photo_id, datetime.datetime.utcnow().isoformat()
+        )
+        return new_id
+
+
+async def get_user_cards(user_id: int):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, card_number, card_photo_id FROM user_cards WHERE user_id = $1 ORDER BY id",
+            user_id
+        )
+        return [(r["id"], r["card_number"], r["card_photo_id"]) for r in rows]
+
+
+async def get_user_card(card_id: int):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        r = await conn.fetchrow(
+            "SELECT id, user_id, card_number, card_photo_id FROM user_cards WHERE id = $1",
+            card_id
+        )
+        return (r["id"], r["user_id"], r["card_number"], r["card_photo_id"]) if r else None
 
 
 async def set_charge_status(request_id: str, status: str):
