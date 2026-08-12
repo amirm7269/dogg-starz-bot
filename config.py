@@ -14,6 +14,10 @@ CHARGE_CHANNEL_ID = int(os.getenv("CHARGE_CHANNEL_ID", "0"))
 # اگه ست نشه، سفارش‌ها مثل قبل مستقیم برای ادمین پیام میشن
 ORDER_CHANNEL_ID = int(os.getenv("ORDER_CHANNEL_ID", "0"))
 
+# آیدی عددی چنلی که مدارک احراز هویت (برای واریزهای بالای سقف روزانه) توش ارسال میشن (اختیاری)
+# اگه ست نشه، مدارک مستقیم برای ادمین پیام میشن
+KYC_CHANNEL_ID = int(os.getenv("KYC_CHANNEL_ID", "0"))
+
 # اطلاعات کارت به کارت (بعداً از داخل ربات هم می‌شه با پنل ادمین عوضش کرد)
 CARD_NUMBER = os.getenv("CARD_NUMBER", "0000-0000-0000-0000")
 CARD_HOLDER = os.getenv("CARD_HOLDER", "نام صاحب کارت")
