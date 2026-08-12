@@ -65,6 +65,25 @@ def charge_menu() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+# ---------- انتخاب گیرنده: برای خودم / هدیه به دیگران ----------
+def recipient_choice(product_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="👤 برای خودم", callback_data=f"pchoice_self_{product_id}")
+    b.button(text="🎁 هدیه به دیگران", callback_data=f"pchoice_gift_{product_id}")
+    b.button(text="🔙 بازگشت", callback_data="menu_main")
+    b.adjust(2, 1)
+    return b.as_markup()
+
+
+def recipient_choice_custom(qty: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="👤 برای خودم", callback_data=f"cchoice_self_{qty}")
+    b.button(text="🎁 هدیه به دیگران", callback_data=f"cchoice_gift_{qty}")
+    b.button(text="🔙 بازگشت", callback_data="menu_stars")
+    b.adjust(2, 1)
+    return b.as_markup()
+
+
 # ---------- تایید خرید ----------
 def confirm_purchase(product_id: int) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
