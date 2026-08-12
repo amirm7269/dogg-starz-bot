@@ -58,6 +58,7 @@ class AdminState(StatesGroup):
     waiting_new_item_name = State()  # data: category
     waiting_new_item_price = State() # data: category, name
     waiting_stars_unit_price = State()
+    waiting_new_text = State()       # data: text_key
 
 
 class CustomStarsState(StatesGroup):
@@ -65,6 +66,95 @@ class CustomStarsState(StatesGroup):
 
 
 DEFAULT_STARS_UNIT_PRICE = 450  # تومان به‌ازای هر استارز (پیش‌فرض، از پنل مدیریت قابل تغییره)
+
+
+# ---------------- متن‌های قابل‌ویرایش ربات (از پنل مدیریت) ----------------
+TEXT_DEFAULTS = {
+    "welcome": (
+        "✨ ━━━━━━━━━━━━━━ ✨\n"
+        "🐾 <b>Dogg Starz | داگ استارز</b> 🐾\n"
+        "✨ ━━━━━━━━━━━━━━ ✨\n\n"
+        "به فروشگاه رسمی <b>استارز، گیفت و پرمیوم تلگرام</b> خوش اومدی! 🎉\n\n"
+        "🛡 <b>خرید ۱۰۰٪ امن و تضمینی</b>\n"
+        "⚡️ <b>تحویل سریع و آنی</b>\n"
+        "🕐 <b>پشتیبانی ۲۴ ساعته</b>\n\n"
+        "👇 یکی از گزینه‌های زیر رو انتخاب کن:"
+    ),
+    "menu_main": (
+        "✨ ━━━━━━━━━━━━━━ ✨\n"
+        "🐾 <b>Dogg Starz | داگ استارز</b> 🐾\n"
+        "✨ ━━━━━━━━━━━━━━ ✨\n\n"
+        "👇 یکی از گزینه‌های زیر رو انتخاب کن:"
+    ),
+    "stars_menu": (
+        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n"
+        "<b>خرید استارز تلگرام</b>\n"
+        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n\n"
+        "یکی از بسته‌های زیر رو انتخاب کن، یا تعداد دلخواه خودت رو وارد کن:"
+    ),
+    "gift_menu": (
+        "🎁 ━━━━━━━━━━━━━━ 🎁\n"
+        "<b>خرید گیفت تلگرام</b>\n"
+        "🎁 ━━━━━━━━━━━━━━ 🎁\n\n"
+        "با ارسال گیفت، لبخند رو به دوستات هدیه بده 💫\n"
+        "کدوم دسته رو می‌خوای؟"
+    ),
+    "gift_special_menu": (
+        "🎊 <b>گیفت های مناسبتی</b> 🎊\n\n"
+        "مخصوص کریسمس، ولنتاین و مناسبت‌های خاص 🎄💝\n"
+        "لطفاً گیفت مورد نظرت رو انتخاب کن:"
+    ),
+    "gift_normal_menu": (
+        "🧸 <b>گیفت های عادی</b> 🧸\n\n"
+        "گیفت‌های محبوب برای هر روز 🎂🌹\n"
+        "لطفاً گیفت مورد نظرت رو انتخاب کن:"
+    ),
+    "premium_menu": (
+        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n"
+        "<b>خرید پرمیوم تلگرام</b>\n"
+        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n\n"
+        "با پرمیوم به امکانات ویژه تلگرام دسترسی پیدا کن 🚀\n"
+        "یکی از پلن‌ها رو انتخاب کن:"
+    ),
+    "referral_intro": (
+        "🔗 ━━━━━━━━━━━━━━ 🔗\n"
+        "<b>سیستم زیرمجموعه‌گیری</b>\n"
+        "🔗 ━━━━━━━━━━━━━━ 🔗\n\n"
+        "💸 لینک اختصاصی خودتو به دوستات بفرست و با هر عضویت جایزه بگیر!"
+    ),
+    "orders_empty": "📦 هنوز هیچ سفارشی ثبت نکردی.\n\nاز منوی اصلی یه خرید انجام بده تا اینجا نمایش داده بشه 🛍",
+    "support": (
+        "🆘 ━━━━━━━━━━━━━━ 🆘\n"
+        "<b>پشتیبانی</b>\n"
+        "🆘 ━━━━━━━━━━━━━━ 🆘\n\n"
+        "برای هرگونه سوال یا مشکل، پیامتو همینجا برامون بفرست، به‌زودی جواب می‌گیری 💬\n\n"
+        "یا مستقیم با ادمین در ارتباط باش: @YourSupportUsername"
+    ),
+    "charge_menu": (
+        "💳 ━━━━━━━━━━━━━━ 💳\n"
+        "<b>افزایش موجودی کیف پول</b>\n"
+        "💳 ━━━━━━━━━━━━━━ 💳\n\n"
+        "روش دلخواهت رو انتخاب کن:"
+    ),
+}
+
+TEXT_LABELS = {
+    "welcome": "👋 پیام خوش‌آمدگویی (استارت)",
+    "menu_main": "🏠 پیام منوی اصلی",
+    "stars_menu": "⭐️ پیام صفحه‌ی خرید استارز",
+    "gift_menu": "🎁 پیام صفحه‌ی انتخاب نوع گیفت",
+    "gift_special_menu": "🎊 پیام گیفت‌های مناسبتی",
+    "gift_normal_menu": "🧸 پیام گیفت‌های عادی",
+    "premium_menu": "💎 پیام صفحه‌ی خرید پرمیوم",
+    "referral_intro": "🔗 متن ابتدای صفحه‌ی زیرمجموعه‌گیری",
+    "orders_empty": "📦 پیام وقتی سفارشی نداری",
+    "support": "🆘 پیام پشتیبانی",
+    "charge_menu": "💳 پیام صفحه‌ی افزایش موجودی",
+}
+
+
+async def get_text(key: str) -> str:
+    return await db.get_setting(f"text_{key}", TEXT_DEFAULTS.get(key, ""))
 
 
 GIFT_SPECIAL_ITEMS = [
@@ -110,16 +200,7 @@ async def cmd_start(message: Message):
 
     await db.get_or_create_user(message.from_user.id, message.from_user.username or "", referrer_id)
 
-    text = (
-        "✨ ━━━━━━━━━━━━━━ ✨\n"
-        "🐾 <b>Dogg Starz | داگ استارز</b> 🐾\n"
-        "✨ ━━━━━━━━━━━━━━ ✨\n\n"
-        "به فروشگاه رسمی <b>استارز، گیفت و پرمیوم تلگرام</b> خوش اومدی! 🎉\n\n"
-        "🛡 <b>خرید ۱۰۰٪ امن و تضمینی</b>\n"
-        "⚡️ <b>تحویل سریع و آنی</b>\n"
-        "🕐 <b>پشتیبانی ۲۴ ساعته</b>\n\n"
-        "👇 یکی از گزینه‌های زیر رو انتخاب کن:"
-    )
+    text = await get_text("welcome")
     await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
 
 
@@ -161,13 +242,8 @@ async def cmd_add_gifts(message: Message):
 @router.callback_query(F.data == "menu_main")
 async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     await state.clear()
-    await call.message.edit_text(
-        "✨ ━━━━━━━━━━━━━━ ✨\n"
-        "🐾 <b>Dogg Starz | داگ استارز</b> 🐾\n"
-        "✨ ━━━━━━━━━━━━━━ ✨\n\n"
-        "👇 یکی از گزینه‌های زیر رو انتخاب کن:",
-        reply_markup=kb.main_menu(is_admin(call.from_user.id))
-    )
+    text = await get_text("menu_main")
+    await call.message.edit_text(text, reply_markup=kb.main_menu(is_admin(call.from_user.id)))
     await call.answer()
 
 
@@ -175,12 +251,7 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "menu_stars")
 async def cb_stars(call: CallbackQuery):
     products = await db.get_products("stars")
-    text = (
-        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n"
-        "<b>خرید استارز تلگرام</b>\n"
-        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n\n"
-        "یکی از بسته‌های زیر رو انتخاب کن، یا تعداد دلخواه خودت رو وارد کن:"
-    )
+    text = await get_text("stars_menu")
     await call.message.edit_text(text, reply_markup=kb.category_menu("stars", products, show_custom_stars=True))
     await call.answer()
 
@@ -267,13 +338,7 @@ async def cb_confirm_custom_stars(call: CallbackQuery, bot: Bot):
 
 @router.callback_query(F.data == "menu_gift")
 async def cb_gift(call: CallbackQuery):
-    text = (
-        "🎁 ━━━━━━━━━━━━━━ 🎁\n"
-        "<b>خرید گیفت تلگرام</b>\n"
-        "🎁 ━━━━━━━━━━━━━━ 🎁\n\n"
-        "با ارسال گیفت، لبخند رو به دوستات هدیه بده 💫\n"
-        "کدوم دسته رو می‌خوای؟"
-    )
+    text = await get_text("gift_menu")
     await call.message.edit_text(text, reply_markup=kb.gift_type_menu())
     await call.answer()
 
@@ -281,11 +346,7 @@ async def cb_gift(call: CallbackQuery):
 @router.callback_query(F.data == "menu_gift_special")
 async def cb_gift_special(call: CallbackQuery):
     products = await db.get_products("gift_special")
-    text = (
-        "🎊 <b>گیفت های مناسبتی</b> 🎊\n\n"
-        "مخصوص کریسمس، ولنتاین و مناسبت‌های خاص 🎄💝\n"
-        "لطفاً گیفت مورد نظرت رو انتخاب کن:"
-    )
+    text = await get_text("gift_special_menu")
     await call.message.edit_text(
         text,
         reply_markup=kb.category_menu("gift_special", products, back_target="menu_gift")
@@ -296,11 +357,7 @@ async def cb_gift_special(call: CallbackQuery):
 @router.callback_query(F.data == "menu_gift_normal")
 async def cb_gift_normal(call: CallbackQuery):
     products = await db.get_products("gift_normal")
-    text = (
-        "🧸 <b>گیفت های عادی</b> 🧸\n\n"
-        "گیفت‌های محبوب برای هر روز 🎂🌹\n"
-        "لطفاً گیفت مورد نظرت رو انتخاب کن:"
-    )
+    text = await get_text("gift_normal_menu")
     await call.message.edit_text(
         text,
         reply_markup=kb.category_menu("gift_normal", products, back_target="menu_gift")
@@ -311,13 +368,7 @@ async def cb_gift_normal(call: CallbackQuery):
 @router.callback_query(F.data == "menu_premium")
 async def cb_premium(call: CallbackQuery):
     products = await db.get_products("premium")
-    text = (
-        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n"
-        "<b>خرید پرمیوم تلگرام</b>\n"
-        "⭐️ ━━━━━━━━━━━━━━ ⭐️\n\n"
-        "با پرمیوم به امکانات ویژه تلگرام دسترسی پیدا کن 🚀\n"
-        "یکی از پلن‌ها رو انتخاب کن:"
-    )
+    text = await get_text("premium_menu")
     await call.message.edit_text(text, reply_markup=kb.category_menu("premium", products))
     await call.answer()
 
@@ -414,11 +465,9 @@ async def cb_referral(call: CallbackQuery, bot: Bot):
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start=ref{call.from_user.id}"
     ref_count = await db.count_referrals(call.from_user.id)
+    intro = await get_text("referral_intro")
     text = (
-        "🔗 ━━━━━━━━━━━━━━ 🔗\n"
-        "<b>سیستم زیرمجموعه‌گیری</b>\n"
-        "🔗 ━━━━━━━━━━━━━━ 🔗\n\n"
-        "💸 لینک اختصاصی خودتو به دوستات بفرست و با هر عضویت جایزه بگیر!\n\n"
+        f"{intro}\n\n"
         f"🔗 لینک شما:\n<code>{link}</code>\n\n"
         f"👥 تعداد زیرمجموعه‌ها: <b>{ref_count}</b> نفر"
     )
@@ -431,7 +480,7 @@ async def cb_referral(call: CallbackQuery, bot: Bot):
 async def cb_orders(call: CallbackQuery):
     orders = await db.get_user_orders(call.from_user.id)
     if not orders:
-        text = "📦 هنوز هیچ سفارشی ثبت نکردی.\n\nاز منوی اصلی یه خرید انجام بده تا اینجا نمایش داده بشه 🛍"
+        text = await get_text("orders_empty")
     else:
         status_map = {"pending": "⏳ در حال پردازش", "done": "✅ انجام‌شده", "cancelled": "❌ لغو‌شده"}
         lines = ["📦 ━━━━━━━━━━━━━━ 📦", "<b>سفارش‌های اخیر شما</b>", "📦 ━━━━━━━━━━━━━━ 📦\n"]
@@ -445,13 +494,7 @@ async def cb_orders(call: CallbackQuery):
 # ---------------- پشتیبانی ----------------
 @router.callback_query(F.data == "menu_support")
 async def cb_support(call: CallbackQuery):
-    text = (
-        "🆘 ━━━━━━━━━━━━━━ 🆘\n"
-        "<b>پشتیبانی</b>\n"
-        "🆘 ━━━━━━━━━━━━━━ 🆘\n\n"
-        "برای هرگونه سوال یا مشکل، پیامتو همینجا برامون بفرست، به‌زودی جواب می‌گیری 💬\n\n"
-        "یا مستقیم با ادمین در ارتباط باش: @YourSupportUsername"
-    )
+    text = await get_text("support")
     await call.message.edit_text(text, reply_markup=kb.back_button().as_markup())
     await call.answer()
 
@@ -459,12 +502,7 @@ async def cb_support(call: CallbackQuery):
 # ---------------- افزایش موجودی ----------------
 @router.callback_query(F.data == "menu_charge")
 async def cb_charge_menu(call: CallbackQuery):
-    text = (
-        "💳 ━━━━━━━━━━━━━━ 💳\n"
-        "<b>افزایش موجودی کیف پول</b>\n"
-        "💳 ━━━━━━━━━━━━━━ 💳\n\n"
-        "روش دلخواهت رو انتخاب کن:"
-    )
+    text = await get_text("charge_menu")
     await call.message.edit_text(text, reply_markup=kb.charge_menu())
     await call.answer()
 
@@ -755,6 +793,81 @@ async def cb_admin_panel(call: CallbackQuery, state: FSMContext):
         reply_markup=kb.admin_panel_menu()
     )
     await call.answer()
+
+
+# ---------------- مدیریت متن‌های ربات (فقط ادمین) ----------------
+@router.callback_query(F.data == "admin_texts")
+async def cb_admin_texts(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.clear()
+    await call.message.edit_text(
+        "📝 <b>مدیریت متن‌های ربات</b>\nهر پیامی که می‌خوای ویرایش کنی رو انتخاب کن:",
+        reply_markup=kb.admin_texts_menu(TEXT_LABELS)
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("admintext_"))
+async def cb_admin_text_view(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    key = call.data.replace("admintext_", "")
+    current = await get_text(key)
+    label = TEXT_LABELS.get(key, key)
+    text = f"{label}\n\n<b>متن فعلی:</b>\n\n{current}"
+    await call.message.edit_text(text, reply_markup=kb.admin_text_view_actions(key))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("admintextedit_"))
+async def cb_admin_text_edit_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    key = call.data.replace("admintextedit_", "")
+    await state.update_data(text_key=key)
+    await state.set_state(AdminState.waiting_new_text)
+    await call.message.edit_text(
+        "✏️ متن جدید رو بفرست.\n\n"
+        "می‌تونی از تگ‌های HTML مثل &lt;b&gt;پررنگ&lt;/b&gt; هم استفاده کنی."
+    )
+    await call.answer()
+
+
+@router.message(AdminState.waiting_new_text)
+async def admin_receive_new_text(message: Message, state: FSMContext):
+    if not message.text:
+        await message.answer("لطفاً یه متن معتبر بفرست.")
+        return
+    data = await state.get_data()
+    key = data.get("text_key")
+    await db.set_setting(f"text_{key}", message.text)
+    await state.clear()
+
+    label = TEXT_LABELS.get(key, key)
+    await message.answer(
+        f"✅ {label} با موفقیت به‌روزرسانی شد.",
+        reply_markup=kb.admin_text_view_actions(key)
+    )
+
+
+@router.callback_query(F.data.startswith("admintextreset_"))
+async def cb_admin_text_reset(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    key = call.data.replace("admintextreset_", "")
+    default_text = TEXT_DEFAULTS.get(key, "")
+    await db.set_setting(f"text_{key}", default_text)
+    label = TEXT_LABELS.get(key, key)
+    await call.message.edit_text(
+        f"♻️ {label} به حالت پیش‌فرض برگشت.\n\n<b>متن فعلی:</b>\n\n{default_text}",
+        reply_markup=kb.admin_text_view_actions(key)
+    )
+    await call.answer("بازگردانی شد ✅")
 
 
 @router.callback_query(F.data.startswith("admincat_"))
