@@ -32,6 +32,14 @@ class AdminState(StatesGroup):
     waiting_new_name = State()       # data: product_id
     waiting_new_item_name = State()  # data: category
     waiting_new_item_price = State() # data: category, name
+    waiting_stars_unit_price = State()
+
+
+class CustomStarsState(StatesGroup):
+    waiting_qty = State()
+
+
+DEFAULT_STARS_UNIT_PRICE = 450  # تومان به‌ازای هر استارز (پیش‌فرض، از پنل مدیریت قابل تغییره)
 
 
 GIFT_SPECIAL_ITEMS = [
@@ -146,10 +154,90 @@ async def cb_stars(call: CallbackQuery):
         "⭐️ ━━━━━━━━━━━━━━ ⭐️\n"
         "<b>خرید استارز تلگرام</b>\n"
         "⭐️ ━━━━━━━━━━━━━━ ⭐️\n\n"
-        "یکی از بسته‌های زیر رو انتخاب کن، تحویل آنیه:"
+        "یکی از بسته‌های زیر رو انتخاب کن، یا تعداد دلخواه خودت رو وارد کن:"
     )
-    await call.message.edit_text(text, reply_markup=kb.category_menu("stars", products))
+    await call.message.edit_text(text, reply_markup=kb.category_menu("stars", products, show_custom_stars=True))
     await call.answer()
+
+
+# ---------------- خرید تعداد دلخواه استارز ----------------
+@router.callback_query(F.data == "stars_custom")
+async def cb_stars_custom(call: CallbackQuery, state: FSMContext):
+    text = (
+        "🔢 <b>خرید تعداد دلخواه استارز</b>\n\n"
+        "تعداد استارزی که می‌خوای رو بفرست (حداقل 50 عدد):"
+    )
+    await call.message.edit_text(text, reply_markup=kb.back_button("menu_stars").as_markup())
+    await state.set_state(CustomStarsState.waiting_qty)
+    await call.answer()
+
+
+@router.message(CustomStarsState.waiting_qty)
+async def receive_custom_stars_qty(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip().isdigit():
+        await message.answer("لطفاً فقط عدد بفرست (مثلاً 200).")
+        return
+
+    qty = int(message.text.strip())
+    if qty < 50:
+        await message.answer("حداقل تعداد قابل خرید 50 استارزه. یه عدد بزرگ‌تر یا مساوی 50 بفرست.")
+        return
+
+    unit_price = int(await db.get_setting("stars_unit_price", DEFAULT_STARS_UNIT_PRICE))
+    total_price = qty * unit_price
+    await state.clear()
+
+    text = (
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n"
+        f"<b>{qty:,} استارز</b>\n"
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n\n"
+        f"💱 قیمت هر استارز: {unit_price:,} تومان\n"
+        f"💰 مبلغ کل: <b>{total_price:,}</b> تومان\n\n"
+        "برای تکمیل خرید، مبلغ از کیف پولت کسر میشه."
+    )
+    await message.answer(text, reply_markup=kb.confirm_custom_stars(qty))
+
+
+@router.callback_query(F.data.startswith("confirmcustom_"))
+async def cb_confirm_custom_stars(call: CallbackQuery, bot: Bot):
+    qty = int(call.data.replace("confirmcustom_", ""))
+    unit_price = int(await db.get_setting("stars_unit_price", DEFAULT_STARS_UNIT_PRICE))
+    total_price = qty * unit_price
+
+    user = await db.get_user(call.from_user.id)
+    balance = user[2] if user else 0
+
+    if balance < total_price:
+        await call.answer("موجودی کافی نیست! اول حسابتو شارژ کن 💳", show_alert=True)
+        return
+
+    item_name = f"{qty:,} استارز (تعداد دلخواه)"
+    await db.update_balance(call.from_user.id, -total_price)
+    order_id = await db.create_order(call.from_user.id, "استارز", item_name, total_price)
+
+    await call.message.edit_text(
+        "✅ ━━━━━━━━━━━━━━ ✅\n"
+        "<b>سفارش شما با موفقیت ثبت شد!</b>\n"
+        "✅ ━━━━━━━━━━━━━━ ✅\n\n"
+        f"🔖 شماره سفارش: <code>{order_id}</code>\n"
+        f"⭐️ آیتم: {item_name}\n"
+        f"💰 مبلغ: {total_price:,} تومان\n\n"
+        "⏳ تیم پشتیبانی به‌زودی سفارش رو پردازش می‌کنه.",
+        reply_markup=kb.back_button().as_markup()
+    )
+    await call.answer("سفارش ثبت شد ✅")
+
+    order_target = config.ORDER_CHANNEL_ID if config.ORDER_CHANNEL_ID else config.ADMIN_ID
+    if order_target:
+        await bot.send_message(
+            order_target,
+            f"🆕 سفارش جدید (تعداد دلخواه)\n"
+            f"کاربر: {call.from_user.id} (@{call.from_user.username})\n"
+            f"آیتم: {item_name}\n"
+            f"مبلغ: {total_price:,} تومان\n"
+            f"شماره سفارش: {order_id}",
+            reply_markup=kb.admin_order_actions(order_id)
+        )
 
 
 @router.callback_query(F.data == "menu_gift")
@@ -506,10 +594,39 @@ async def cb_admin_category(call: CallbackQuery):
     products = await db.get_products(category)
     label = kb.CATEGORY_LABELS.get(category, category)
     text = f"📋 <b>مدیریت {label}</b>\nروی هر آیتم بزن تا ویرایش/حذفش کنی، یا آیتم جدید اضافه کن."
+    if category == "stars":
+        unit_price = int(await db.get_setting("stars_unit_price", DEFAULT_STARS_UNIT_PRICE))
+        text += f"\n\n💱 قیمت فعلی هر استارز (تعداد دلخواه): <b>{unit_price:,}</b> تومان"
     if not products:
         text += "\n\nهنوز آیتمی اضافه نشده."
     await call.message.edit_text(text, reply_markup=kb.admin_category_menu(category, products))
     await call.answer()
+
+
+@router.callback_query(F.data == "adminstarsunitprice")
+async def cb_admin_stars_unit_price_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.set_state(AdminState.waiting_stars_unit_price)
+    await call.message.edit_text("💱 قیمت جدید هر استارز رو به تومان بفرست (فقط عدد، مثلاً 450):")
+    await call.answer()
+
+
+@router.message(AdminState.waiting_stars_unit_price)
+async def admin_receive_stars_unit_price(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip().isdigit():
+        await message.answer("لطفاً فقط عدد بفرست (مثلاً 450).")
+        return
+    new_price = int(message.text.strip())
+    await db.set_setting("stars_unit_price", new_price)
+    await state.clear()
+
+    products = await db.get_products("stars")
+    await message.answer(
+        f"✅ قیمت هر استارز به {new_price:,} تومان تغییر کرد.",
+        reply_markup=kb.admin_category_menu("stars", products)
+    )
 
 
 @router.callback_query(F.data.startswith("adminedit_"))
