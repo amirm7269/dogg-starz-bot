@@ -33,6 +33,15 @@ def back_button(target="menu_main") -> InlineKeyboardBuilder:
     return b
 
 
+# ---------- زیرمنوی حساب کاربری ----------
+def account_menu() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="💳 کارت‌های من", callback_data="menu_mycards")
+    b.button(text="🔙 بازگشت به منو", callback_data="menu_main")
+    b.adjust(1)
+    return b.as_markup()
+
+
 # ---------- زیرمنوی گیفت: انتخاب مناسبتی/عادی ----------
 def gift_type_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
@@ -98,6 +107,18 @@ def confirm_custom_stars(qty: int) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="✅ تایید و پرداخت از کیف پول", callback_data=f"confirmcustom_{qty}")
     b.button(text="🔙 بازگشت", callback_data="menu_stars")
+    b.adjust(1)
+    return b.as_markup()
+
+
+# ---------- انتخاب یکی از کارت‌های قبلاً تاییدشده ----------
+def choose_saved_card(cards) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for card_id, card_number, _photo_id in cards:
+        masked = f"{card_number[:4]}••••••••{card_number[-4:]}" if len(card_number) >= 8 else card_number
+        b.button(text=f"💳 {masked}", callback_data=f"usecard_{card_id}")
+    b.button(text="➕ افزودن کارت جدید (نیاز به تایید)", callback_data="addcard_new")
+    b.button(text="🔙 بازگشت", callback_data="menu_main")
     b.adjust(1)
     return b.as_markup()
 
