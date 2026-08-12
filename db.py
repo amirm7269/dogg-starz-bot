@@ -55,6 +55,12 @@ async def init_db():
                 sort_order INTEGER DEFAULT 0
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
 
     await _seed_default_products()
 
@@ -234,3 +240,20 @@ async def count_referrals(user_id: int):
     async with pool.acquire() as conn:
         count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE referrer_id = $1", user_id)
         return count if count else 0
+
+
+async def get_setting(key: str, default=None):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        value = await conn.fetchval("SELECT value FROM settings WHERE key = $1", key)
+        return value if value is not None else default
+
+
+async def set_setting(key: str, value: str):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO settings (key, value) VALUES ($1, $2) "
+            "ON CONFLICT (key) DO UPDATE SET value = $2",
+            key, str(value)
+        )
