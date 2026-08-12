@@ -64,6 +64,27 @@ class CustomStarsState(StatesGroup):
     waiting_qty = State()
 
 
+class GiftState(StatesGroup):
+    waiting_recipient = State()  # data: kind ('product'|'custom'), ref (product_id or qty)
+
+
+USERNAME_RE_ERROR = (
+    "⚠️ یوزرنیم واردشده معتبر نیست. یوزرنیم تلگرام باید بین 5 تا 32 کاراکتر باشه و فقط شامل حروف، عدد و "
+    "زیرخط (_) باشه. لطفاً دوباره بفرست (با یا بدون @):"
+)
+
+
+def _valid_username(raw: str) -> str | None:
+    """یوزرنیم رو پاک‌سازی و اعتبارسنجی می‌کنه؛ اگه معتبر بود خودشو (بدون @) برمی‌گردونه، وگرنه None."""
+    if not raw:
+        return None
+    cleaned = raw.strip().lstrip("@")
+    import re
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", cleaned):
+        return cleaned
+    return None
+
+
 DEFAULT_STARS_UNIT_PRICE = 450  # تومان به‌ازای هر استارز (پیش‌فرض، از پنل مدیریت قابل تغییره)
 
 
@@ -278,10 +299,26 @@ async def receive_custom_stars_qty(message: Message, state: FSMContext):
         await message.answer("حداقل تعداد قابل خرید 50 استارزه. یه عدد بزرگ‌تر یا مساوی 50 بفرست.")
         return
 
+    await state.clear()
+    text = (
+        f"🔢 <b>{qty:,} استارز</b>\n\n"
+        "این خرید برای خودته یا هدیه به یه شخص دیگه؟"
+    )
+    await message.answer(text, reply_markup=kb.recipient_choice_custom(qty))
+
+
+@router.callback_query(F.data.startswith("cchoice_self_"))
+async def cb_cchoice_self(call: CallbackQuery, state: FSMContext):
+    if not _check_buyer_username(call):
+        await call.answer(
+            "برای ثبت سفارش باید یوزرنیم تلگرام داشته باشی. از تنظیمات تلگرام یه Username بذار و دوباره امتحان کن.",
+            show_alert=True
+        )
+        return
+    qty = int(call.data.replace("cchoice_self_", ""))
+    await state.clear()
     unit_price = int(await db.get_setting("stars_unit_price", DEFAULT_STARS_UNIT_PRICE))
     total_price = qty * unit_price
-    await state.clear()
-
     text = (
         "🧾 ━━━━━━━━━━━━━━ 🧾\n"
         f"<b>{qty:,} استارز</b>\n"
@@ -290,11 +327,30 @@ async def receive_custom_stars_qty(message: Message, state: FSMContext):
         f"💰 مبلغ کل: <b>{total_price:,}</b> تومان\n\n"
         "برای تکمیل خرید، مبلغ از کیف پولت کسر میشه."
     )
-    await message.answer(text, reply_markup=kb.confirm_custom_stars(qty))
+    await call.message.edit_text(text, reply_markup=kb.confirm_custom_stars(qty))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("cchoice_gift_"))
+async def cb_cchoice_gift(call: CallbackQuery, state: FSMContext):
+    if not _check_buyer_username(call):
+        await call.answer(
+            "برای ثبت سفارش باید یوزرنیم تلگرام داشته باشی. از تنظیمات تلگرام یه Username بذار و دوباره امتحان کن.",
+            show_alert=True
+        )
+        return
+    qty = int(call.data.replace("cchoice_gift_", ""))
+    await state.update_data(kind="custom", ref=qty)
+    await state.set_state(GiftState.waiting_recipient)
+    await call.message.edit_text(
+        "🎁 یوزرنیم شخصی که می‌خوای این هدیه رو براش ارسال کنی رو بفرست (با یا بدون @):",
+        reply_markup=kb.back_button("menu_stars").as_markup()
+    )
+    await call.answer()
 
 
 @router.callback_query(F.data.startswith("confirmcustom_"))
-async def cb_confirm_custom_stars(call: CallbackQuery, bot: Bot):
+async def cb_confirm_custom_stars(call: CallbackQuery, bot: Bot, state: FSMContext):
     qty = int(call.data.replace("confirmcustom_", ""))
     unit_price = int(await db.get_setting("stars_unit_price", DEFAULT_STARS_UNIT_PRICE))
     total_price = qty * unit_price
@@ -306,16 +362,26 @@ async def cb_confirm_custom_stars(call: CallbackQuery, bot: Bot):
         await call.answer("موجودی کافی نیست! اول حسابتو شارژ کن 💳", show_alert=True)
         return
 
-    item_name = f"{qty:,} استارز (تعداد دلخواه)"
+    data = await state.get_data()
+    recipient = None
+    if data.get("kind") == "custom" and data.get("ref") == qty:
+        recipient = data.get("recipient")
+    await state.clear()
+
+    base_name = f"{qty:,} استارز (تعداد دلخواه)"
+    item_name = f"{base_name} (🎁 برای @{recipient})" if recipient else base_name
+
     await db.update_balance(call.from_user.id, -total_price)
     order_id = await db.create_order(call.from_user.id, "استارز", item_name, total_price)
 
+    gift_line = f"🎁 گیرنده: @{recipient}\n" if recipient else ""
     await call.message.edit_text(
         "✅ ━━━━━━━━━━━━━━ ✅\n"
         "<b>سفارش شما با موفقیت ثبت شد!</b>\n"
         "✅ ━━━━━━━━━━━━━━ ✅\n\n"
         f"🔖 شماره سفارش: <code>{order_id}</code>\n"
-        f"⭐️ آیتم: {item_name}\n"
+        f"⭐️ آیتم: {base_name}\n"
+        f"{gift_line}"
         f"💰 مبلغ: {total_price:,} تومان\n\n"
         "⏳ تیم پشتیبانی به‌زودی سفارش رو پردازش می‌کنه.",
         reply_markup=kb.back_button().as_markup()
@@ -324,11 +390,13 @@ async def cb_confirm_custom_stars(call: CallbackQuery, bot: Bot):
 
     order_target = config.ORDER_CHANNEL_ID if config.ORDER_CHANNEL_ID else config.ADMIN_ID
     if order_target:
+        admin_gift_line = f"🎁 گیرنده‌ی هدیه: @{recipient}\n" if recipient else ""
         await bot.send_message(
             order_target,
             f"🆕 سفارش جدید (تعداد دلخواه)\n"
             f"کاربر: {call.from_user.id} (@{call.from_user.username})\n"
-            f"آیتم: {item_name}\n"
+            f"آیتم: {base_name}\n"
+            f"{admin_gift_line}"
             f"مبلغ: {total_price:,} تومان\n"
             f"شماره سفارش: {order_id}",
             reply_markup=kb.admin_order_actions(order_id)
@@ -387,6 +455,38 @@ async def cb_item_selected(call: CallbackQuery):
         f"<b>{name}</b>\n"
         "🧾 ━━━━━━━━━━━━━━ 🧾\n\n"
         f"💰 قیمت: <b>{price:,}</b> تومان\n\n"
+        "این خرید برای خودته یا هدیه به یه شخص دیگه؟"
+    )
+    await call.message.edit_text(text, reply_markup=kb.recipient_choice(product_id))
+    await call.answer()
+
+
+def _check_buyer_username(call: CallbackQuery) -> bool:
+    if not call.from_user.username:
+        return False
+    return True
+
+
+@router.callback_query(F.data.startswith("pchoice_self_"))
+async def cb_pchoice_self(call: CallbackQuery, state: FSMContext):
+    if not _check_buyer_username(call):
+        await call.answer(
+            "برای ثبت سفارش باید یوزرنیم تلگرام داشته باشی. از تنظیمات تلگرام یه Username بذار و دوباره امتحان کن.",
+            show_alert=True
+        )
+        return
+    product_id = int(call.data.replace("pchoice_self_", ""))
+    await state.clear()
+    product = await db.get_product(product_id)
+    if not product:
+        await call.answer("این آیتم دیگه موجود نیست.", show_alert=True)
+        return
+    _, category, name, price = product
+    text = (
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n"
+        f"<b>{name}</b>\n"
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n\n"
+        f"💰 قیمت: <b>{price:,}</b> تومان\n\n"
         "برای تکمیل خرید، مبلغ از کیف پولت کسر میشه.\n"
         "اگه موجودی کافی نداری، اول از «💳 افزایش موجودی» شارژ کن."
     )
@@ -394,8 +494,78 @@ async def cb_item_selected(call: CallbackQuery):
     await call.answer()
 
 
+@router.callback_query(F.data.startswith("pchoice_gift_"))
+async def cb_pchoice_gift(call: CallbackQuery, state: FSMContext):
+    if not _check_buyer_username(call):
+        await call.answer(
+            "برای ثبت سفارش باید یوزرنیم تلگرام داشته باشی. از تنظیمات تلگرام یه Username بذار و دوباره امتحان کن.",
+            show_alert=True
+        )
+        return
+    product_id = int(call.data.replace("pchoice_gift_", ""))
+    product = await db.get_product(product_id)
+    if not product:
+        await call.answer("این آیتم دیگه موجود نیست.", show_alert=True)
+        return
+    await state.update_data(kind="product", ref=product_id)
+    await state.set_state(GiftState.waiting_recipient)
+    await call.message.edit_text(
+        "🎁 یوزرنیم شخصی که می‌خوای این هدیه رو براش ارسال کنی رو بفرست (با یا بدون @):",
+        reply_markup=kb.back_button("menu_main").as_markup()
+    )
+    await call.answer()
+
+
+@router.message(GiftState.waiting_recipient)
+async def receive_gift_recipient(message: Message, state: FSMContext):
+    recipient = _valid_username(message.text or "")
+    if not recipient:
+        await message.answer(USERNAME_RE_ERROR)
+        return
+
+    if message.from_user.username and recipient.lower() == message.from_user.username.lower():
+        await message.answer("نمی‌تونی خودتو به‌عنوان گیرنده‌ی هدیه انتخاب کنی. یوزرنیم یه شخص دیگه رو بفرست:")
+        return
+
+    await state.update_data(recipient=recipient)
+    data = await state.get_data()
+    kind = data.get("kind")
+
+    if kind == "product":
+        product_id = data.get("ref")
+        product = await db.get_product(product_id)
+        if not product:
+            await message.answer("این آیتم دیگه موجود نیست.")
+            await state.clear()
+            return
+        _, category, name, price = product
+        text = (
+            "🧾 ━━━━━━━━━━━━━━ 🧾\n"
+            f"<b>{name}</b>\n"
+            "🧾 ━━━━━━━━━━━━━━ 🧾\n\n"
+            f"💰 قیمت: <b>{price:,}</b> تومان\n"
+            f"🎁 گیرنده‌ی هدیه: @{recipient}\n\n"
+            "برای تکمیل خرید، مبلغ از کیف پولت کسر میشه."
+        )
+        await message.answer(text, reply_markup=kb.confirm_purchase(product_id))
+    else:  # custom stars
+        qty = data.get("ref")
+        unit_price = int(await db.get_setting("stars_unit_price", DEFAULT_STARS_UNIT_PRICE))
+        total_price = qty * unit_price
+        text = (
+            "🧾 ━━━━━━━━━━━━━━ 🧾\n"
+            f"<b>{qty:,} استارز</b>\n"
+            "🧾 ━━━━━━━━━━━━━━ 🧾\n\n"
+            f"💱 قیمت هر استارز: {unit_price:,} تومان\n"
+            f"💰 مبلغ کل: <b>{total_price:,}</b> تومان\n"
+            f"🎁 گیرنده‌ی هدیه: @{recipient}\n\n"
+            "برای تکمیل خرید، مبلغ از کیف پولت کسر میشه."
+        )
+        await message.answer(text, reply_markup=kb.confirm_custom_stars(qty))
+
+
 @router.callback_query(F.data.startswith("confirm_"))
-async def cb_confirm_purchase(call: CallbackQuery, bot: Bot):
+async def cb_confirm_purchase(call: CallbackQuery, bot: Bot, state: FSMContext):
     product_id = int(call.data.replace("confirm_", ""))
     product = await db.get_product(product_id)
     if not product:
@@ -410,15 +580,25 @@ async def cb_confirm_purchase(call: CallbackQuery, bot: Bot):
         await call.answer("موجودی کافی نیست! اول حسابتو شارژ کن 💳", show_alert=True)
         return
 
-    await db.update_balance(call.from_user.id, -price)
-    order_id = await db.create_order(call.from_user.id, kb.CATEGORY_LABELS.get(category, category), name, price)
+    data = await state.get_data()
+    recipient = None
+    if data.get("kind") == "product" and data.get("ref") == product_id:
+        recipient = data.get("recipient")
+    await state.clear()
 
+    display_name = f"{name} (🎁 برای @{recipient})" if recipient else name
+
+    await db.update_balance(call.from_user.id, -price)
+    order_id = await db.create_order(call.from_user.id, kb.CATEGORY_LABELS.get(category, category), display_name, price)
+
+    gift_line = f"🎁 گیرنده: @{recipient}\n" if recipient else ""
     await call.message.edit_text(
         "✅ ━━━━━━━━━━━━━━ ✅\n"
         "<b>سفارش شما با موفقیت ثبت شد!</b>\n"
         "✅ ━━━━━━━━━━━━━━ ✅\n\n"
         f"🔖 شماره سفارش: <code>{order_id}</code>\n"
         f"🎁 آیتم: {name}\n"
+        f"{gift_line}"
         f"💰 مبلغ: {price:,} تومان\n\n"
         "⏳ تیم پشتیبانی به‌زودی سفارش رو پردازش می‌کنه.\n"
         "وضعیتش رو از «📦 پیگیری سفارش» چک کن.",
@@ -428,11 +608,13 @@ async def cb_confirm_purchase(call: CallbackQuery, bot: Bot):
 
     order_target = config.ORDER_CHANNEL_ID if config.ORDER_CHANNEL_ID else config.ADMIN_ID
     if order_target:
+        admin_gift_line = f"🎁 گیرنده‌ی هدیه: @{recipient}\n" if recipient else ""
         await bot.send_message(
             order_target,
             f"🆕 سفارش جدید\n"
             f"کاربر: {call.from_user.id} (@{call.from_user.username})\n"
             f"آیتم: {name}\n"
+            f"{admin_gift_line}"
             f"مبلغ: {price:,} تومان\n"
             f"شماره سفارش: {order_id}",
             reply_markup=kb.admin_order_actions(order_id)
