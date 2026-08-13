@@ -18,6 +18,10 @@ ORDER_CHANNEL_ID = int(os.getenv("ORDER_CHANNEL_ID", "0"))
 # اگه ست نشه، مدارک مستقیم برای ادمین پیام میشن
 KYC_CHANNEL_ID = int(os.getenv("KYC_CHANNEL_ID", "0"))
 
+# آیدی عددی چنل عمومی گزارش خریدهای موفق (برای جلب اعتماد مشتری‌های جدید) - اختیاری
+# اگه ست نشه، گزارشی ارسال نمیشه
+REPORTS_CHANNEL_ID = int(os.getenv("REPORTS_CHANNEL_ID", "0"))
+
 # اطلاعات کارت به کارت (بعداً از داخل ربات هم می‌شه با پنل ادمین عوضش کرد)
 CARD_NUMBER = os.getenv("CARD_NUMBER", "0000-0000-0000-0000")
 CARD_HOLDER = os.getenv("CARD_HOLDER", "نام صاحب کارت")
