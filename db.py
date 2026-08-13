@@ -40,6 +40,7 @@ async def init_db():
                 created_at TEXT
             )
         """)
+        await conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TEXT")
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS charge_requests (
                 request_id TEXT PRIMARY KEY,
@@ -225,17 +226,25 @@ async def get_user_orders(user_id: int):
 async def set_order_status(order_id: str, status: str):
     pool = await _get_pool()
     async with pool.acquire() as conn:
-        await conn.execute("UPDATE orders SET status = $1 WHERE order_id = $2", status, order_id)
+        if status == "done":
+            await conn.execute(
+                "UPDATE orders SET status = $1, completed_at = $2 WHERE order_id = $3",
+                status, datetime.datetime.utcnow().isoformat(), order_id
+            )
+        else:
+            await conn.execute("UPDATE orders SET status = $1 WHERE order_id = $2", status, order_id)
 
 
 async def get_order(order_id: str):
     pool = await _get_pool()
     async with pool.acquire() as conn:
         r = await conn.fetchrow(
-            "SELECT order_id, user_id, category, item, price, status FROM orders WHERE order_id = $1",
+            "SELECT order_id, user_id, category, item, price, status, created_at, completed_at FROM orders WHERE order_id = $1",
             order_id
         )
-        return (r["order_id"], r["user_id"], r["category"], r["item"], r["price"], r["status"]) if r else None
+        if not r:
+            return None
+        return (r["order_id"], r["user_id"], r["category"], r["item"], r["price"], r["status"], r["created_at"], r["completed_at"])
 
 
 async def create_charge_request(user_id: int, amount: int, phone: str = None, kind: str = "normal",
