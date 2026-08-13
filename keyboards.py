@@ -165,6 +165,14 @@ def admin_order_actions(order_id: str) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+# ---------- دکمه‌ی خرید از ربات (زیر پیام‌های گزارش عمومی) ----------
+def report_buy_button(bot_username: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="🛒 خرید از ربات", url=f"https://t.me/{bot_username}")
+    b.adjust(1)
+    return b.as_markup()
+
+
 # ---------- پنل مدیریت محصولات ----------
 def admin_panel_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
