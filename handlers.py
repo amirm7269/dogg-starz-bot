@@ -1186,6 +1186,7 @@ async def cb_admin_order_action(call: CallbackQuery, bot: Bot):
         if config.REPORTS_CHANNEL_ID:
             order_after = await db.get_order(order_id)
             completed_at_new = order_after[7] if order_after else None
+            me = await bot.get_me()
             report_text = (
                 "🛍 <b>گزارش خرید موفق</b>\n\n"
                 f"👤 خریدار: <code>{_mask_user_id(user_id)}</code>\n"
@@ -1194,10 +1195,15 @@ async def cb_admin_order_action(call: CallbackQuery, bot: Bot):
                 f"💰 مبلغ پرداخت‌شده: {price:,} تومان\n\n"
                 f"🕐 ثبت سفارش: {_format_ir_time(created_at)}\n"
                 f"✅ تکمیل سفارش: {_format_ir_time(completed_at_new)}\n\n"
+                f"🤖 @{me.username}\n"
                 "🐾 Dogg Starz | داگ استارز"
             )
             try:
-                await bot.send_message(config.REPORTS_CHANNEL_ID, report_text)
+                await bot.send_message(
+                    config.REPORTS_CHANNEL_ID,
+                    report_text,
+                    reply_markup=kb.report_buy_button(me.username)
+                )
             except Exception:
                 pass
     else:
