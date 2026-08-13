@@ -22,6 +22,10 @@ KYC_CHANNEL_ID = int(os.getenv("KYC_CHANNEL_ID", "0"))
 # اگه ست نشه، گزارشی ارسال نمیشه
 REPORTS_CHANNEL_ID = int(os.getenv("REPORTS_CHANNEL_ID", "0"))
 
+# دو کانالی که عضویت توشون برای استفاده از ربات اجباریه
+FORCE_JOIN_CHANNEL_1 = os.getenv("FORCE_JOIN_CHANNEL_1", "@doggstarzReport")
+FORCE_JOIN_CHANNEL_2 = os.getenv("FORCE_JOIN_CHANNEL_2", "@doggStarz")
+
 # اطلاعات کارت به کارت (بعداً از داخل ربات هم می‌شه با پنل ادمین عوضش کرد)
 CARD_NUMBER = os.getenv("CARD_NUMBER", "0000-0000-0000-0000")
 CARD_HOLDER = os.getenv("CARD_HOLDER", "نام صاحب کارت")
