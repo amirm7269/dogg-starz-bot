@@ -18,8 +18,7 @@ def main_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🔗 زیرمجموعه‌گیری")],
             [KeyboardButton(text="🆘 پشتیبانی"), KeyboardButton(text="📦 پیگیری سفارش")],
         ],
-        resize_keyboard=True,
-        is_persistent=True
+        resize_keyboard=True
     )
 
 
