@@ -166,6 +166,8 @@ class AdminState(StatesGroup):
     waiting_new_item_price = State() # data: category, name
     waiting_stars_unit_price = State()
     waiting_new_text = State()       # data: text_key
+    waiting_new_card_number = State()
+    waiting_new_card_holder = State()  # data: card_number
 
 
 class CustomStarsState(StatesGroup):
@@ -283,6 +285,13 @@ TEXT_LABELS = {
 
 async def get_text(key: str) -> str:
     return await db.get_setting(f"text_{key}", TEXT_DEFAULTS.get(key, ""))
+
+
+async def get_card_info() -> tuple[str, str]:
+    """شماره کارت و نام صاحب کارتی که به مشتری‌ها نشون داده میشه (قابل تغییر از پنل مدیریت)"""
+    card_number = await db.get_setting("card_number", config.CARD_NUMBER)
+    card_holder = await db.get_setting("card_holder", config.CARD_HOLDER)
+    return card_number, card_holder
 
 
 GIFT_SPECIAL_ITEMS = [
@@ -951,10 +960,11 @@ async def cb_charge_card(call: CallbackQuery, state: FSMContext):
 async def _show_card_and_ask_receipt(message: Message, amount: int, state: FSMContext):
     await state.update_data(amount=amount)
     await state.set_state(ChargeState.waiting_receipt)
+    card_number, card_holder = await get_card_info()
     text = (
         f"مبلغ {amount:,} تومان رو به شماره کارت زیر واریز کن:\n\n"
-        f"💳 <code>{config.CARD_NUMBER}</code>\n"
-        f"👤 به نام: {config.CARD_HOLDER}\n\n"
+        f"💳 <code>{card_number}</code>\n"
+        f"👤 به نام: {card_holder}\n\n"
         "📸 حالا عکس رسید واریزی رو بفرست:"
     )
     await message.answer(text)
@@ -1040,10 +1050,11 @@ async def cb_use_saved_card(call: CallbackQuery, state: FSMContext):
 
     await state.update_data(amount=amount)
     await state.set_state(ChargeState.waiting_receipt)
+    card_number, card_holder = await get_card_info()
     text = (
         f"مبلغ {amount:,} تومان رو به شماره کارت زیر واریز کن:\n\n"
-        f"💳 <code>{config.CARD_NUMBER}</code>\n"
-        f"👤 به نام: {config.CARD_HOLDER}\n\n"
+        f"💳 <code>{card_number}</code>\n"
+        f"👤 به نام: {card_holder}\n\n"
         "📸 حالا عکس رسید واریزی رو بفرست:"
     )
     await call.message.edit_text(text)
@@ -1178,12 +1189,13 @@ async def cb_admin_kyc_action(call: CallbackQuery, bot: Bot):
             await call.message.edit_caption(caption=(call.message.caption or "") + "\n\n✅ احراز هویت تایید شد.")
         except Exception:
             pass
+        bot_card_number, bot_card_holder = await get_card_info()
         await bot.send_message(
             user_id,
             "✅ <b>احراز هویت شما تایید شد!</b>\n\n"
             f"حالا مبلغ {amount:,} تومان رو به شماره کارت زیر واریز کن:\n\n"
-            f"💳 <code>{config.CARD_NUMBER}</code>\n"
-            f"👤 به نام: {config.CARD_HOLDER}\n\n"
+            f"💳 <code>{bot_card_number}</code>\n"
+            f"👤 به نام: {bot_card_holder}\n\n"
             "📸 بعد از واریز، عکس رسید رو همینجا بفرست.\n\n"
             "🔖 این کارتت رو ذخیره کردیم؛ دفعات بعد دیگه نیازی به احراز هویت دوباره نیست، فقط از «💳 کارت‌های من» انتخابش کن."
         )
@@ -1333,6 +1345,65 @@ async def cb_admin_panel(call: CallbackQuery, state: FSMContext):
         reply_markup=kb.admin_panel_menu()
     )
     await call.answer()
+
+
+# ---------------- مدیریت شماره کارت نمایش‌داده‌شده به مشتری (فقط ادمین) ----------------
+@router.callback_query(F.data == "admin_card")
+async def cb_admin_card(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.clear()
+    card_number, card_holder = await get_card_info()
+    text = (
+        "💳 <b>شماره کارت فعلی که به مشتری‌ها نشون داده میشه:</b>\n\n"
+        f"شماره کارت: <code>{card_number}</code>\n"
+        f"به نام: {card_holder}"
+    )
+    await call.message.edit_text(text, reply_markup=kb.admin_card_actions())
+    await call.answer()
+
+
+@router.callback_query(F.data == "admincardedit")
+async def cb_admin_card_edit_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.set_state(AdminState.waiting_new_card_number)
+    await call.message.edit_text("💳 شماره کارت جدید رو بفرست (فقط عدد):")
+    await call.answer()
+
+
+@router.message(AdminState.waiting_new_card_number)
+async def admin_receive_new_card_number(message: Message, state: FSMContext):
+    raw = (message.text or "").strip().replace(" ", "").replace("-", "")
+    if not raw.isdigit() or not (12 <= len(raw) <= 19):
+        await message.answer("لطفاً شماره کارت رو درست و فقط به‌صورت عدد بفرست (16 رقم):")
+        return
+    await state.update_data(card_number=raw)
+    await state.set_state(AdminState.waiting_new_card_holder)
+    await message.answer("👤 حالا نام صاحب کارت رو بفرست:")
+
+
+@router.message(AdminState.waiting_new_card_holder)
+async def admin_receive_new_card_holder(message: Message, state: FSMContext):
+    holder = (message.text or "").strip()
+    if not holder:
+        await message.answer("لطفاً یه نام معتبر بفرست.")
+        return
+    data = await state.get_data()
+    card_number = data.get("card_number")
+
+    await db.set_setting("card_number", card_number)
+    await db.set_setting("card_holder", holder)
+    await state.clear()
+
+    await message.answer(
+        f"✅ شماره کارت به‌روزرسانی شد.\n\n"
+        f"💳 <code>{card_number}</code>\n"
+        f"👤 به نام: {holder}",
+        reply_markup=kb.admin_card_actions()
+    )
 
 
 # ---------------- مدیریت متن‌های ربات (فقط ادمین) ----------------
