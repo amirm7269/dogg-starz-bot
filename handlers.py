@@ -250,6 +250,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
     text = await get_text("welcome")
     await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+    await message.answer("🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:", reply_markup=kb.main_reply_keyboard())
 
 
 @router.message(PhoneState.waiting_phone, F.contact)
@@ -265,9 +266,9 @@ async def receive_start_phone(message: Message, state: FSMContext):
     await db.set_user_phone(message.from_user.id, phone)
     await state.clear()
 
-    await message.answer("✅ ممنون! شماره‌ت ثبت شد.", reply_markup=ReplyKeyboardRemove())
     text = await get_text("welcome")
     await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+    await message.answer("🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:", reply_markup=kb.main_reply_keyboard())
 
 
 @router.message(PhoneState.waiting_phone)
@@ -276,6 +277,69 @@ async def start_phone_wrong(message: Message):
         "لطفاً از دکمه‌ی «📱 ارسال شماره تلفنم» استفاده کن تا شماره‌ت ثبت بشه.",
         reply_markup=_contact_keyboard()
     )
+
+
+# ---------------- دکمه‌های منوی ثابت (کنار آیکون پیوست) ----------------
+@router.message(F.text == "🛒 خرید محصول")
+async def reply_btn_buy(message: Message):
+    text = await get_text("menu_main")
+    await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+
+
+@router.message(F.text == "💳 افزایش موجودی")
+async def reply_btn_charge(message: Message):
+    text = await get_text("charge_menu")
+    await message.answer(text, reply_markup=kb.charge_menu())
+
+
+@router.message(F.text == "👤 حساب کاربری")
+async def reply_btn_account(message: Message):
+    user = await db.get_user(message.from_user.id)
+    balance = user[2] if user else 0
+    ref_count = await db.count_referrals(message.from_user.id)
+    text = (
+        "👤 ━━━━━━━━━━━━━━ 👤\n"
+        "<b>حساب کاربری شما</b>\n"
+        "👤 ━━━━━━━━━━━━━━ 👤\n\n"
+        f"🆔 آیدی عددی: <code>{message.from_user.id}</code>\n"
+        f"💰 موجودی کیف پول: <b>{balance:,}</b> تومان\n"
+        f"👥 تعداد زیرمجموعه‌ها: <b>{ref_count}</b> نفر"
+    )
+    await message.answer(text, reply_markup=kb.account_menu())
+
+
+@router.message(F.text == "🔗 زیرمجموعه‌گیری")
+async def reply_btn_referral(message: Message, bot: Bot):
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start=ref{message.from_user.id}"
+    ref_count = await db.count_referrals(message.from_user.id)
+    intro = await get_text("referral_intro")
+    text = (
+        f"{intro}\n\n"
+        f"🔗 لینک شما:\n<code>{link}</code>\n\n"
+        f"👥 تعداد زیرمجموعه‌ها: <b>{ref_count}</b> نفر"
+    )
+    await message.answer(text, reply_markup=kb.back_button().as_markup())
+
+
+@router.message(F.text == "🆘 پشتیبانی")
+async def reply_btn_support(message: Message):
+    text = await get_text("support")
+    await message.answer(text, reply_markup=kb.back_button().as_markup())
+
+
+@router.message(F.text == "📦 پیگیری سفارش")
+async def reply_btn_orders(message: Message):
+    orders = await db.get_user_orders(message.from_user.id)
+    if not orders:
+        text = await get_text("orders_empty")
+    else:
+        status_map = {"pending": "⏳ در حال پردازش", "done": "✅ انجام‌شده", "cancelled": "❌ لغو‌شده"}
+        lines = ["📦 ━━━━━━━━━━━━━━ 📦", "<b>سفارش‌های اخیر شما</b>", "📦 ━━━━━━━━━━━━━━ 📦\n"]
+        for order_id, category, item, price, status, created_at in orders:
+            lines.append(f"🔸 {item} — {price:,} تومان\n{status_map.get(status, status)} | <code>{order_id}</code>\n")
+        text = "\n".join(lines)
+    await message.answer(text, reply_markup=kb.back_button().as_markup())
 
 
 # ---------------- افزودن دسته‌ای گیفت‌های آماده (فقط ادمین) ----------------
