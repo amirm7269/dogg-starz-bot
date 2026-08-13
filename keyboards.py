@@ -1,5 +1,5 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 
 CATEGORY_LABELS = {
     "stars": "استارز",
@@ -7,6 +7,21 @@ CATEGORY_LABELS = {
     "gift_normal": "گیفت‌های عادی",
     "premium": "پرمیوم",
 }
+
+
+# ---------- کیبورد ثابت پایین صفحه (کنار آیکون پیوست) ----------
+def main_reply_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🛒 خرید محصول")],
+            [KeyboardButton(text="💳 افزایش موجودی"), KeyboardButton(text="👤 حساب کاربری")],
+            [KeyboardButton(text="🔗 زیرمجموعه‌گیری")],
+            [KeyboardButton(text="🆘 پشتیبانی"), KeyboardButton(text="📦 پیگیری سفارش")],
+        ],
+        resize_keyboard=True,
+        is_persistent=True
+    )
+
 
 # ---------- منوی اصلی ----------
 def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
