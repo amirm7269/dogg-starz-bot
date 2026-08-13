@@ -81,6 +81,16 @@ async def init_db():
             )
         """)
 
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS custom_menu (
+                id SERIAL PRIMARY KEY,
+                parent_id INTEGER REFERENCES custom_menu(id) ON DELETE CASCADE,
+                title TEXT,
+                content TEXT,
+                sort_order INTEGER DEFAULT 0
+            )
+        """)
+
     await _seed_default_products()
 
 
@@ -344,3 +354,57 @@ async def set_setting(key: str, value: str):
             "ON CONFLICT (key) DO UPDATE SET value = $2",
             key, str(value)
         )
+
+
+# ---------------- منوی سفارشی (دکمه‌های اصلی و زیرمجموعه‌ی دلخواه ادمین) ----------------
+async def add_menu_item(parent_id, title: str, content: str):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        new_id = await conn.fetchval(
+            "INSERT INTO custom_menu (parent_id, title, content, sort_order) VALUES ($1, $2, $3, 999) RETURNING id",
+            parent_id, title, content
+        )
+        return new_id
+
+
+async def get_menu_items(parent_id):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        if parent_id is None:
+            rows = await conn.fetch(
+                "SELECT id, title, content FROM custom_menu WHERE parent_id IS NULL ORDER BY sort_order, id"
+            )
+        else:
+            rows = await conn.fetch(
+                "SELECT id, title, content FROM custom_menu WHERE parent_id = $1 ORDER BY sort_order, id",
+                parent_id
+            )
+        return [(r["id"], r["title"], r["content"]) for r in rows]
+
+
+async def get_menu_item(item_id: int):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        r = await conn.fetchrow(
+            "SELECT id, parent_id, title, content FROM custom_menu WHERE id = $1",
+            item_id
+        )
+        return (r["id"], r["parent_id"], r["title"], r["content"]) if r else None
+
+
+async def update_menu_item_title(item_id: int, title: str):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE custom_menu SET title = $1 WHERE id = $2", title, item_id)
+
+
+async def update_menu_item_content(item_id: int, content: str):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE custom_menu SET content = $1 WHERE id = $2", content, item_id)
+
+
+async def delete_menu_item(item_id: int):
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM custom_menu WHERE id = $1", item_id)
