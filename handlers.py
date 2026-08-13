@@ -1,7 +1,7 @@
-from aiogram import Router, F, Bot
+from aiogram import Router, F, Bot, BaseMiddleware
 from aiogram.types import (
     Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton,
-    ReplyKeyboardRemove, InputMediaPhoto, InputMediaVideo
+    ReplyKeyboardRemove, InputMediaPhoto, InputMediaVideo, TelegramObject
 )
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
@@ -24,6 +24,97 @@ async def channel_get_id(message: Message):
 
 def is_admin(user_id: int) -> bool:
     return config.ADMIN_ID != 0 and user_id == config.ADMIN_ID
+
+
+# ---------------- عضویت اجباری در کانال‌ها ----------------
+FORCE_JOIN_TEXT = (
+    "🚫 <b>برای استفاده از ربات باید اول عضو کانال‌های زیر بشی:</b>\n\n"
+    "📢 کانال داگ استارز\n"
+    "📋 کانال گزارش خریدها\n\n"
+    "بعد از عضویت توی هر دو کانال، دکمه‌ی «✅ عضو شدم» رو بزن:"
+)
+
+
+async def _is_member_of(bot: Bot, channel: str, user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+        return member.status not in ("left", "kicked")
+    except Exception:
+        return False
+
+
+async def _check_force_join(bot: Bot, user_id: int) -> bool:
+    m1 = await _is_member_of(bot, config.FORCE_JOIN_CHANNEL_1, user_id)
+    m2 = await _is_member_of(bot, config.FORCE_JOIN_CHANNEL_2, user_id)
+    return m1 and m2
+
+
+async def _send_menu_or_join_prompt(message: Message, bot: Bot, with_reply_keyboard: bool = False):
+    joined = await _check_force_join(bot, message.from_user.id)
+    if joined:
+        text = await get_text("welcome")
+        await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+        if with_reply_keyboard:
+            await message.answer(
+                "🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:",
+                reply_markup=kb.main_reply_keyboard()
+            )
+    else:
+        await message.answer(FORCE_JOIN_TEXT, reply_markup=kb.force_join_keyboard())
+
+
+class ForceJoinMiddleware(BaseMiddleware):
+    """قبل از هر پیام/دکمه (به‌جز /start و دکمه‌ی «عضو شدم») چک می‌کنه که کاربر عضو کانال‌های اجباری هست یا نه."""
+
+    async def __call__(self, handler, event: TelegramObject, data: dict):
+        bot: Bot = data.get("bot")
+        user = data.get("event_from_user")
+
+        if not bot or not user or is_admin(user.id):
+            return await handler(event, data)
+
+        if isinstance(event, Message) and event.text and event.text.startswith("/start"):
+            return await handler(event, data)
+
+        if isinstance(event, CallbackQuery) and event.data == "checkjoin":
+            return await handler(event, data)
+
+        state: FSMContext = data.get("state")
+        if state:
+            current = await state.get_state()
+            if current == PhoneState.waiting_phone.state:
+                return await handler(event, data)
+
+        if await _check_force_join(bot, user.id):
+            return await handler(event, data)
+
+        if isinstance(event, CallbackQuery):
+            try:
+                await event.message.edit_text(FORCE_JOIN_TEXT, reply_markup=kb.force_join_keyboard())
+            except Exception:
+                await event.message.answer(FORCE_JOIN_TEXT, reply_markup=kb.force_join_keyboard())
+            await event.answer()
+        elif isinstance(event, Message):
+            await event.answer(FORCE_JOIN_TEXT, reply_markup=kb.force_join_keyboard())
+        return
+
+
+router.message.outer_middleware(ForceJoinMiddleware())
+router.callback_query.outer_middleware(ForceJoinMiddleware())
+
+
+@router.callback_query(F.data == "checkjoin")
+async def cb_check_join(call: CallbackQuery, bot: Bot):
+    if await _check_force_join(bot, call.from_user.id):
+        text = await get_text("welcome")
+        await call.message.edit_text(text, reply_markup=kb.main_menu(is_admin(call.from_user.id)))
+        await call.answer("✅ عضویت تایید شد!")
+        await call.message.answer(
+            "🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:",
+            reply_markup=kb.main_reply_keyboard()
+        )
+    else:
+        await call.answer("هنوز عضو هر دو کانال نشدی! لطفاً اول عضو بشو.", show_alert=True)
 
 
 DAILY_CHARGE_LIMIT = 500_000  # سقف مجاز واریز روزانه بدون احراز هویت (تومان)
@@ -224,7 +315,7 @@ GIFT_NORMAL_ITEMS = [
 
 # ---------------- START ----------------
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     referrer_id = None
     args = message.text.split(maxsplit=1)
     if len(args) > 1 and args[1].startswith("ref"):
@@ -248,13 +339,20 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    text = await get_text("welcome")
-    await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
-    await message.answer("🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:", reply_markup=kb.main_reply_keyboard())
+    joined = await _check_force_join(bot, message.from_user.id)
+    if joined:
+        text = await get_text("welcome")
+        await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+        await message.answer(
+            "🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:",
+            reply_markup=kb.main_reply_keyboard()
+        )
+    else:
+        await message.answer(FORCE_JOIN_TEXT, reply_markup=kb.force_join_keyboard())
 
 
 @router.message(PhoneState.waiting_phone, F.contact)
-async def receive_start_phone(message: Message, state: FSMContext):
+async def receive_start_phone(message: Message, state: FSMContext, bot: Bot):
     phone = message.contact.phone_number
     if not _is_iranian_phone(phone):
         await message.answer(
@@ -266,9 +364,16 @@ async def receive_start_phone(message: Message, state: FSMContext):
     await db.set_user_phone(message.from_user.id, phone)
     await state.clear()
 
-    text = await get_text("welcome")
-    await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
-    await message.answer("🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:", reply_markup=kb.main_reply_keyboard())
+    joined = await _check_force_join(bot, message.from_user.id)
+    if joined:
+        text = await get_text("welcome")
+        await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+        await message.answer(
+            "🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:",
+            reply_markup=kb.main_reply_keyboard()
+        )
+    else:
+        await message.answer(FORCE_JOIN_TEXT, reply_markup=kb.force_join_keyboard())
 
 
 @router.message(PhoneState.waiting_phone)
