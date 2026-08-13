@@ -190,7 +190,16 @@ def admin_panel_menu() -> InlineKeyboardMarkup:
     b.button(text="🧸 مدیریت گیفت عادی", callback_data="admincat_gift_normal")
     b.button(text="⭐ مدیریت پرمیوم", callback_data="admincat_premium")
     b.button(text="📝 مدیریت متن‌های ربات", callback_data="admin_texts")
+    b.button(text="💳 تغییر شماره کارت", callback_data="admin_card")
     b.button(text="🔙 بازگشت", callback_data="menu_main")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_card_actions() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✏️ ویرایش شماره کارت و نام صاحبش", callback_data="admincardedit")
+    b.button(text="🔙 بازگشت", callback_data="admin_panel")
     b.adjust(1)
     return b.as_markup()
 
