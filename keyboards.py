@@ -173,6 +173,16 @@ def report_buy_button(bot_username: str) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+# ---------- عضویت اجباری در کانال‌ها ----------
+def force_join_keyboard() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="📢 عضویت در کانال داگ استارز", url="https://t.me/doggStarz")
+    b.button(text="📋 عضویت در کانال گزارش خرید", url="https://t.me/doggstarzReport")
+    b.button(text="✅ عضو شدم", callback_data="checkjoin")
+    b.adjust(1)
+    return b.as_markup()
+
+
 # ---------- پنل مدیریت محصولات ----------
 def admin_panel_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
