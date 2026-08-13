@@ -23,7 +23,7 @@ def main_reply_keyboard() -> ReplyKeyboardMarkup:
 
 
 # ---------- منوی اصلی ----------
-def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
+def main_menu(is_admin: bool = False, custom_items=None) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="⭐️ خرید استارز", callback_data="menu_stars")
     b.button(text="🎁 خرید گیفت", callback_data="menu_gift")
@@ -33,11 +33,19 @@ def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
     b.button(text="🔗 زیرمجموعه‌گیری", callback_data="menu_referral")
     b.button(text="📦 سفارش‌های من", callback_data="menu_orders")
     b.button(text="🆘 پشتیبانی", callback_data="menu_support")
+
+    sizes = [2, 2, 2, 2]
+
+    custom_items = custom_items or []
+    for item_id, title, _content in custom_items:
+        b.button(text=title, callback_data=f"custom_{item_id}")
+        sizes.append(1)
+
     if is_admin:
         b.button(text="⚙️ پنل مدیریت", callback_data="admin_panel")
-        b.adjust(2, 2, 2, 2, 1)
-    else:
-        b.adjust(2, 2, 2, 2)
+        sizes.append(1)
+
+    b.adjust(*sizes)
     return b.as_markup()
 
 
@@ -191,6 +199,7 @@ def admin_panel_menu() -> InlineKeyboardMarkup:
     b.button(text="⭐ مدیریت پرمیوم", callback_data="admincat_premium")
     b.button(text="📝 مدیریت متن‌های ربات", callback_data="admin_texts")
     b.button(text="💳 تغییر شماره کارت", callback_data="admin_card")
+    b.button(text="🧩 مدیریت منوی سفارشی", callback_data="adminmenu_root")
     b.button(text="🔙 بازگشت", callback_data="menu_main")
     b.adjust(1)
     return b.as_markup()
@@ -200,6 +209,50 @@ def admin_card_actions() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="✏️ ویرایش شماره کارت و نام صاحبش", callback_data="admincardedit")
     b.button(text="🔙 بازگشت", callback_data="admin_panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+# ---------- منوی سفارشی: نمایش برای مشتری ----------
+def custom_menu_view(item_id: int, parent_id, children) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for child_id, title, _content in children:
+        b.button(text=title, callback_data=f"custom_{child_id}")
+    back_target = f"custom_{parent_id}" if parent_id else "menu_main"
+    b.button(text="🔙 بازگشت", callback_data=back_target)
+    b.adjust(1)
+    return b.as_markup()
+
+
+# ---------- منوی سفارشی: مدیریت از پنل ادمین ----------
+def admin_menu_root(items) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for item_id, title, _content in items:
+        b.button(text=title, callback_data=f"adminmenu_{item_id}")
+    b.button(text="➕ افزودن دکمه اصلی جدید", callback_data="adminmenuadd_root")
+    b.button(text="🔙 بازگشت", callback_data="admin_panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_menu_node(item_id: int, parent_id, children) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for child_id, title, _content in children:
+        b.button(text=title, callback_data=f"adminmenu_{child_id}")
+    b.button(text="➕ افزودن زیرمجموعه", callback_data=f"adminmenuadd_{item_id}")
+    b.button(text="✏️ ویرایش عنوان", callback_data=f"adminmenuedittitle_{item_id}")
+    b.button(text="✏️ ویرایش محتوا", callback_data=f"adminmenueditcontent_{item_id}")
+    b.button(text="🗑 حذف این دکمه", callback_data=f"adminmenudel_{item_id}")
+    back_target = f"adminmenu_{parent_id}" if parent_id else "adminmenu_root"
+    b.button(text="🔙 بازگشت", callback_data=back_target)
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_menu_delete_confirm(item_id: int, parent_id) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ بله، حذف کن (زیرمجموعه‌هاشم حذف میشه)", callback_data=f"adminmenudelok_{item_id}")
+    b.button(text="❌ انصراف", callback_data=f"adminmenu_{item_id}")
     b.adjust(1)
     return b.as_markup()
 
