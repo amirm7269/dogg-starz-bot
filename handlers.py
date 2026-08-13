@@ -6,6 +6,7 @@ from aiogram.types import (
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+import datetime
 
 import config
 import db
@@ -1076,6 +1077,26 @@ async def cb_admin_charge_action(call: CallbackQuery, bot: Bot):
 
 
 # ---------------- اکشن‌های ادمین: تغییر وضعیت سفارش ----------------
+def _mask_user_id(user_id: int) -> str:
+    s = str(user_id)
+    if len(s) <= 4:
+        return s
+    return s[:2] + "*" * (len(s) - 4) + s[-2:]
+
+
+IRAN_TZ_OFFSET = datetime.timedelta(hours=3, minutes=30)
+
+
+def _format_ir_time(iso_str: str) -> str:
+    if not iso_str:
+        return "-"
+    try:
+        dt = datetime.datetime.fromisoformat(iso_str) + IRAN_TZ_OFFSET
+        return dt.strftime("%Y/%m/%d %H:%M:%S")
+    except Exception:
+        return iso_str
+
+
 @router.callback_query(F.data.startswith("adminorder_"))
 async def cb_admin_order_action(call: CallbackQuery, bot: Bot):
     if not is_admin(call.from_user.id):
@@ -1091,12 +1112,30 @@ async def cb_admin_order_action(call: CallbackQuery, bot: Bot):
         await call.answer("سفارش پیدا نشد.", show_alert=True)
         return
 
-    _, user_id, category, item, price, status = order
+    _, user_id, category, item, price, status, created_at, completed_at = order
 
     if action == "done":
         await db.set_order_status(order_id, "done")
         await call.message.edit_text(call.message.text + "\n\n✅ انجام شد.")
         await bot.send_message(user_id, f"✅ سفارش شما ({item}) با موفقیت انجام شد. ممنون از خریدت 🐾")
+
+        if config.REPORTS_CHANNEL_ID:
+            order_after = await db.get_order(order_id)
+            completed_at_new = order_after[7] if order_after else None
+            report_text = (
+                "🛍 <b>گزارش خرید موفق</b>\n\n"
+                f"👤 خریدار: <code>{_mask_user_id(user_id)}</code>\n"
+                f"📦 سفارش: {item}\n"
+                f"🏷 دسته: {category}\n"
+                f"💰 مبلغ پرداخت‌شده: {price:,} تومان\n\n"
+                f"🕐 ثبت سفارش: {_format_ir_time(created_at)}\n"
+                f"✅ تکمیل سفارش: {_format_ir_time(completed_at_new)}\n\n"
+                "🐾 Dogg Starz | داگ استارز"
+            )
+            try:
+                await bot.send_message(config.REPORTS_CHANNEL_ID, report_text)
+            except Exception:
+                pass
     else:
         await db.set_order_status(order_id, "cancelled")
         await db.update_balance(user_id, price)
