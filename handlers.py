@@ -53,7 +53,7 @@ async def _send_menu_or_join_prompt(message: Message, bot: Bot, with_reply_keybo
     joined = await _check_force_join(bot, message.from_user.id)
     if joined:
         text = await get_text("welcome")
-        await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+        await message.answer(text, reply_markup=await build_main_menu(message.from_user.id))
         if with_reply_keyboard:
             await message.answer(
                 "🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:",
@@ -107,7 +107,7 @@ router.callback_query.outer_middleware(ForceJoinMiddleware())
 async def cb_check_join(call: CallbackQuery, bot: Bot):
     if await _check_force_join(bot, call.from_user.id):
         text = await get_text("welcome")
-        await call.message.edit_text(text, reply_markup=kb.main_menu(is_admin(call.from_user.id)))
+        await call.message.edit_text(text, reply_markup=await build_main_menu(call.from_user.id))
         await call.answer("✅ عضویت تایید شد!")
         await call.message.answer(
             "🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:",
@@ -168,6 +168,13 @@ class AdminState(StatesGroup):
     waiting_new_text = State()       # data: text_key
     waiting_new_card_number = State()
     waiting_new_card_holder = State()  # data: card_number
+
+
+class MenuBuilderState(StatesGroup):
+    waiting_new_button_title = State()    # data: parent_id
+    waiting_new_button_content = State()  # data: parent_id, title
+    waiting_edit_title = State()          # data: item_id
+    waiting_edit_content = State()        # data: item_id
 
 
 class CustomStarsState(StatesGroup):
@@ -294,6 +301,12 @@ async def get_card_info() -> tuple[str, str]:
     return card_number, card_holder
 
 
+async def build_main_menu(user_id: int):
+    """منوی اصلی رو با دکمه‌های ثابت + دکمه‌های اصلی سفارشی که ادمین اضافه کرده می‌سازه"""
+    custom_items = await db.get_menu_items(None)
+    return kb.main_menu(is_admin(user_id), custom_items)
+
+
 GIFT_SPECIAL_ITEMS = [
     ("🐰 گیفت تدی خرگوشی", 23000),
     ("🎄 گیفت تدی درخت کاج", 23000),
@@ -351,7 +364,7 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     joined = await _check_force_join(bot, message.from_user.id)
     if joined:
         text = await get_text("welcome")
-        await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+        await message.answer(text, reply_markup=await build_main_menu(message.from_user.id))
         await message.answer(
             "🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:",
             reply_markup=kb.main_reply_keyboard()
@@ -376,7 +389,7 @@ async def receive_start_phone(message: Message, state: FSMContext, bot: Bot):
     joined = await _check_force_join(bot, message.from_user.id)
     if joined:
         text = await get_text("welcome")
-        await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+        await message.answer(text, reply_markup=await build_main_menu(message.from_user.id))
         await message.answer(
             "🔽 برای دسترسی سریع‌تر، از منوی زیر هم می‌تونی استفاده کنی:",
             reply_markup=kb.main_reply_keyboard()
@@ -397,7 +410,7 @@ async def start_phone_wrong(message: Message):
 @router.message(F.text == "🛒 خرید محصول")
 async def reply_btn_buy(message: Message):
     text = await get_text("menu_main")
-    await message.answer(text, reply_markup=kb.main_menu(is_admin(message.from_user.id)))
+    await message.answer(text, reply_markup=await build_main_menu(message.from_user.id))
 
 
 @router.message(F.text == "💳 افزایش موجودی")
@@ -495,7 +508,7 @@ async def cmd_add_gifts(message: Message):
 async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     await state.clear()
     text = await get_text("menu_main")
-    await call.message.edit_text(text, reply_markup=kb.main_menu(is_admin(call.from_user.id)))
+    await call.message.edit_text(text, reply_markup=await build_main_menu(call.from_user.id))
     await call.answer()
 
 
@@ -1404,6 +1417,221 @@ async def admin_receive_new_card_holder(message: Message, state: FSMContext):
         f"👤 به نام: {holder}",
         reply_markup=kb.admin_card_actions()
     )
+
+
+# ==================== منوی سفارشی: نمایش برای مشتری ====================
+@router.callback_query(F.data.startswith("custom_"))
+async def cb_custom_menu_item(call: CallbackQuery):
+    item_id = int(call.data.replace("custom_", ""))
+    item = await db.get_menu_item(item_id)
+    if not item:
+        await call.answer("این بخش دیگه موجود نیست.", show_alert=True)
+        return
+
+    _, parent_id, title, content = item
+    children = await db.get_menu_items(item_id)
+
+    text = f"<b>{title}</b>\n\n{content}" if content else f"<b>{title}</b>"
+    await call.message.edit_text(text, reply_markup=kb.custom_menu_view(item_id, parent_id, children))
+    await call.answer()
+
+
+# ==================== منوی سفارشی: مدیریت از پنل ادمین ====================
+@router.callback_query(F.data == "adminmenu_root")
+async def cb_adminmenu_root(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.clear()
+    items = await db.get_menu_items(None)
+    text = "🧩 <b>مدیریت منوی سفارشی</b>\n\nدکمه‌های اصلی که خودتون به منو اضافه کردید:"
+    if not items:
+        text += "\n\nهنوز دکمه‌ای اضافه نکردید."
+    await call.message.edit_text(text, reply_markup=kb.admin_menu_root(items))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adminmenu_"))
+async def cb_adminmenu_node(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.clear()
+    item_id = int(call.data.replace("adminmenu_", ""))
+    item = await db.get_menu_item(item_id)
+    if not item:
+        await call.answer("این آیتم پیدا نشد.", show_alert=True)
+        return
+
+    _, parent_id, title, content = item
+    children = await db.get_menu_items(item_id)
+
+    text = f"🧩 <b>{title}</b>\n\n"
+    text += f"محتوای فعلی:\n{content}\n\n" if content else "هنوز محتوایی برای این دکمه تنظیم نشده.\n\n"
+    text += "زیرمجموعه‌های این دکمه:" if children else "این دکمه هنوز زیرمجموعه‌ای نداره."
+    await call.message.edit_text(text, reply_markup=kb.admin_menu_node(item_id, parent_id, children))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adminmenuadd_"))
+async def cb_adminmenu_add_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    raw = call.data.replace("adminmenuadd_", "")
+    parent_id = None if raw == "root" else int(raw)
+    await state.update_data(parent_id=parent_id)
+    await state.set_state(MenuBuilderState.waiting_new_button_title)
+    await call.message.edit_text("✏️ عنوان دکمه‌ی جدید رو بفرست (همونی که روی دکمه نمایش داده میشه):")
+    await call.answer()
+
+
+@router.message(MenuBuilderState.waiting_new_button_title)
+async def menu_receive_new_title(message: Message, state: FSMContext):
+    title = (message.text or "").strip()
+    if not title:
+        await message.answer("لطفاً یه عنوان معتبر بفرست.")
+        return
+    await state.update_data(title=title)
+    await state.set_state(MenuBuilderState.waiting_new_button_content)
+    await message.answer(
+        "📝 حالا محتوایی که با زدن این دکمه نمایش داده میشه رو بفرست.\n\n"
+        "اگه این دکمه فقط قراره چند تا زیرمجموعه داشته باشه و خودش متنی نداره، همین‌جا یه خط کوتاه (مثلاً یه توضیح ساده) بفرست."
+    )
+
+
+@router.message(MenuBuilderState.waiting_new_button_content)
+async def menu_receive_new_content(message: Message, state: FSMContext):
+    content = message.text or ""
+    if not content.strip():
+        await message.answer("لطفاً یه متن معتبر بفرست.")
+        return
+    data = await state.get_data()
+    parent_id = data.get("parent_id")
+    title = data.get("title")
+
+    new_id = await db.add_menu_item(parent_id, title, content)
+    await state.clear()
+
+    await message.answer(f"✅ دکمه‌ی «{title}» اضافه شد.")
+
+    if parent_id is None:
+        items = await db.get_menu_items(None)
+        await message.answer("🧩 <b>مدیریت منوی سفارشی</b>", reply_markup=kb.admin_menu_root(items))
+    else:
+        item = await db.get_menu_item(parent_id)
+        children = await db.get_menu_items(parent_id)
+        _, grandparent_id, p_title, p_content = item
+        text = f"🧩 <b>{p_title}</b>\n\nزیرمجموعه‌های این دکمه:"
+        await message.answer(text, reply_markup=kb.admin_menu_node(parent_id, grandparent_id, children))
+
+
+@router.callback_query(F.data.startswith("adminmenuedittitle_"))
+async def cb_adminmenu_edit_title_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    item_id = int(call.data.replace("adminmenuedittitle_", ""))
+    await state.update_data(item_id=item_id)
+    await state.set_state(MenuBuilderState.waiting_edit_title)
+    await call.message.edit_text("✏️ عنوان جدید رو بفرست:")
+    await call.answer()
+
+
+@router.message(MenuBuilderState.waiting_edit_title)
+async def menu_receive_edit_title(message: Message, state: FSMContext):
+    title = (message.text or "").strip()
+    if not title:
+        await message.answer("لطفاً یه عنوان معتبر بفرست.")
+        return
+    data = await state.get_data()
+    item_id = data.get("item_id")
+    await db.update_menu_item_title(item_id, title)
+    await state.clear()
+
+    item = await db.get_menu_item(item_id)
+    _, parent_id, new_title, content = item
+    children = await db.get_menu_items(item_id)
+    text = f"✅ عنوان به‌روزرسانی شد.\n\n🧩 <b>{new_title}</b>"
+    await message.answer(text, reply_markup=kb.admin_menu_node(item_id, parent_id, children))
+
+
+@router.callback_query(F.data.startswith("adminmenueditcontent_"))
+async def cb_adminmenu_edit_content_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    item_id = int(call.data.replace("adminmenueditcontent_", ""))
+    await state.update_data(item_id=item_id)
+    await state.set_state(MenuBuilderState.waiting_edit_content)
+    await call.message.edit_text("📝 محتوای جدید رو بفرست:")
+    await call.answer()
+
+
+@router.message(MenuBuilderState.waiting_edit_content)
+async def menu_receive_edit_content(message: Message, state: FSMContext):
+    content = message.text or ""
+    if not content.strip():
+        await message.answer("لطفاً یه متن معتبر بفرست.")
+        return
+    data = await state.get_data()
+    item_id = data.get("item_id")
+    await db.update_menu_item_content(item_id, content)
+    await state.clear()
+
+    item = await db.get_menu_item(item_id)
+    _, parent_id, title, new_content = item
+    children = await db.get_menu_items(item_id)
+    text = f"✅ محتوا به‌روزرسانی شد.\n\n🧩 <b>{title}</b>\n\n{new_content}"
+    await message.answer(text, reply_markup=kb.admin_menu_node(item_id, parent_id, children))
+
+
+@router.callback_query(F.data.startswith("adminmenudelok_"))
+async def cb_adminmenu_delete_confirmed(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    item_id = int(call.data.replace("adminmenudelok_", ""))
+    item = await db.get_menu_item(item_id)
+    parent_id = item[1] if item else None
+
+    await db.delete_menu_item(item_id)
+
+    if parent_id is None:
+        items = await db.get_menu_items(None)
+        await call.message.edit_text(
+            "🗑 دکمه حذف شد.\n\n🧩 <b>مدیریت منوی سفارشی</b>",
+            reply_markup=kb.admin_menu_root(items)
+        )
+    else:
+        parent_item = await db.get_menu_item(parent_id)
+        if parent_item:
+            _, grandparent_id, p_title, _ = parent_item
+            children = await db.get_menu_items(parent_id)
+            await call.message.edit_text(
+                f"🗑 دکمه حذف شد.\n\n🧩 <b>{p_title}</b>",
+                reply_markup=kb.admin_menu_node(parent_id, grandparent_id, children)
+            )
+    await call.answer("حذف شد ✅")
+
+
+@router.callback_query(F.data.startswith("adminmenudel_"))
+async def cb_adminmenu_delete_ask(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    item_id = int(call.data.replace("adminmenudel_", ""))
+    item = await db.get_menu_item(item_id)
+    if not item:
+        await call.answer("این آیتم پیدا نشد.", show_alert=True)
+        return
+    _, parent_id, title, _content = item
+    await call.message.edit_text(
+        f"⚠️ مطمئنی می‌خوای «{title}» رو حذف کنی؟\n"
+        "اگه زیرمجموعه داشته باشه، اونام حذف میشن.",
+        reply_markup=kb.admin_menu_delete_confirm(item_id, parent_id)
+    )
+    await call.answer()
 
 
 # ---------------- مدیریت متن‌های ربات (فقط ادمین) ----------------
