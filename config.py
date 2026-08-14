@@ -22,6 +22,10 @@ KYC_CHANNEL_ID = int(os.getenv("KYC_CHANNEL_ID", "0"))
 # اگه ست نشه، گزارشی ارسال نمیشه
 REPORTS_CHANNEL_ID = int(os.getenv("REPORTS_CHANNEL_ID", "0"))
 
+# آیدی عددی چنلی که سفارش‌های «ری‌اکشن استارزی» توش برای تایید ارسال میشن (اختیاری)
+# اگه ست نشه، مستقیم برای ادمین پیام میشن
+REACTION_CHANNEL_ID = int(os.getenv("REACTION_CHANNEL_ID", "0"))
+
 # دو کانالی که عضویت توشون برای استفاده از ربات اجباریه
 FORCE_JOIN_CHANNEL_1 = os.getenv("FORCE_JOIN_CHANNEL_1", "@doggstarzReport")
 FORCE_JOIN_CHANNEL_2 = os.getenv("FORCE_JOIN_CHANNEL_2", "@doggStarz")
