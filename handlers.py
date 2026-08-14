@@ -169,6 +169,7 @@ class AdminState(StatesGroup):
     waiting_new_card_number = State()
     waiting_new_card_holder = State()  # data: card_number
     waiting_reaction_unit_price = State()
+    waiting_ton_unit_price = State()
 
 
 class MenuBuilderState(StatesGroup):
@@ -185,6 +186,11 @@ class CustomStarsState(StatesGroup):
 class ReactionState(StatesGroup):
     waiting_qty = State()
     waiting_post_link = State()
+
+
+class TonState(StatesGroup):
+    waiting_qty = State()             # data: method, min_qty
+    waiting_wallet_address = State()  # data: method, qty
 
 
 class GiftState(StatesGroup):
@@ -210,6 +216,7 @@ def _valid_username(raw: str) -> str | None:
 
 DEFAULT_STARS_UNIT_PRICE = 450  # تومان به‌ازای هر استارز (پیش‌فرض، از پنل مدیریت قابل تغییره)
 DEFAULT_REACTION_UNIT_PRICE = 450  # تومان به‌ازای هر ری‌اکشن استارزی (پیش‌فرض، از پنل مدیریت قابل تغییره)
+DEFAULT_TON_UNIT_PRICE = 700000  # تومان به‌ازای هر TON (پیش‌فرض تقریبی - چون قیمت تون نوسان داره حتماً از پنل مدیریت به‌روزش کنید)
 
 
 # ---------------- متن‌های قابل‌ویرایش ربات (از پنل مدیریت) ----------------
@@ -787,6 +794,188 @@ async def cb_confirm_reaction(call: CallbackQuery, bot: Bot, state: FSMContext):
         )
 
 
+# ==================== خرید ارز تون ====================
+@router.callback_query(F.data == "menu_ton")
+async def cb_menu_ton(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    unit_price = int(await db.get_setting("ton_unit_price", DEFAULT_TON_UNIT_PRICE))
+    text = (
+        "🪙 ━━━━━━━━━━━━━━ 🪙\n"
+        "<b>خرید ارز تون (TON)</b>\n"
+        "🪙 ━━━━━━━━━━━━━━ 🪙\n\n"
+        f"💱 قیمت هر TON: {unit_price:,} تومان\n\n"
+        "کدوم روش رو می‌خوای؟"
+    )
+    await call.message.edit_text(text, reply_markup=kb.ton_method_menu())
+    await call.answer()
+
+
+@router.callback_query(F.data == "ton_wallet")
+async def cb_ton_wallet(call: CallbackQuery, state: FSMContext):
+    await state.update_data(method="wallet", min_qty=0.1)
+    await state.set_state(TonState.waiting_qty)
+    await call.message.edit_text(
+        "💼 <b>واریز به ولت شخصی</b>\n\n"
+        "چند TON می‌خوای بخری؟ (حداقل 0.1 TON، مثلاً 0.5 یا 2):",
+        reply_markup=kb.back_button("menu_ton").as_markup()
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "ton_telegram")
+async def cb_ton_telegram(call: CallbackQuery, state: FSMContext):
+    await state.update_data(method="telegram", min_qty=1)
+    await state.set_state(TonState.waiting_qty)
+    await call.message.edit_text(
+        "📱 <b>شارژ مستقیم اکانت تلگرام</b>\n\n"
+        "چند TON می‌خوای بخری؟ (حداقل 1 TON):",
+        reply_markup=kb.back_button("menu_ton").as_markup()
+    )
+    await call.answer()
+
+
+def _parse_ton_amount(text: str):
+    try:
+        value = float((text or "").strip().replace(",", "."))
+        if value <= 0:
+            return None
+        return value
+    except (ValueError, TypeError):
+        return None
+
+
+@router.message(TonState.waiting_qty)
+async def receive_ton_qty(message: Message, state: FSMContext):
+    qty = _parse_ton_amount(message.text)
+    if qty is None:
+        await message.answer("لطفاً فقط عدد بفرست (مثلاً 0.5 یا 2):")
+        return
+
+    data = await state.get_data()
+    min_qty = data.get("min_qty", 0.1)
+    method = data.get("method")
+
+    if qty < min_qty:
+        await message.answer(f"حداقل مقدار قابل خرید برای این روش {min_qty} TON هست. یه عدد بزرگ‌تر بفرست:")
+        return
+
+    await state.update_data(qty=qty)
+
+    if method == "wallet":
+        await state.set_state(TonState.waiting_wallet_address)
+        await message.answer("💼 آدرس ولت TON‌ت رو بفرست:")
+        return
+
+    # روش تلگرام: نیازی به آدرس نیست، بریم سراغ تایید نهایی
+    if not is_admin(message.from_user.id) and not message.from_user.username:
+        await message.answer(
+            "برای ثبت سفارش باید یوزرنیم تلگرام داشته باشی. از تنظیمات تلگرام یه Username بذار و دوباره امتحان کن."
+        )
+        await state.clear()
+        return
+
+    await _show_ton_confirm(message, state)
+
+
+@router.message(TonState.waiting_wallet_address)
+async def receive_ton_wallet_address(message: Message, state: FSMContext):
+    address = (message.text or "").strip()
+    if not address or len(address) < 20:
+        await message.answer("لطفاً یه آدرس ولت معتبر بفرست:")
+        return
+
+    if not is_admin(message.from_user.id) and not message.from_user.username:
+        await message.answer(
+            "برای ثبت سفارش باید یوزرنیم تلگرام داشته باشی. از تنظیمات تلگرام یه Username بذار و دوباره امتحان کن."
+        )
+        await state.clear()
+        return
+
+    await state.update_data(wallet_address=address)
+    await _show_ton_confirm(message, state)
+
+
+async def _show_ton_confirm(message: Message, state: FSMContext):
+    data = await state.get_data()
+    qty = data.get("qty")
+    method = data.get("method")
+    wallet_address = data.get("wallet_address")
+
+    unit_price = int(await db.get_setting("ton_unit_price", DEFAULT_TON_UNIT_PRICE))
+    total_price = round(qty * unit_price)
+
+    method_label = "واریز به ولت شخصی" if method == "wallet" else "شارژ مستقیم اکانت تلگرام"
+    text = (
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n"
+        f"<b>{qty} TON</b>\n"
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n\n"
+        f"🔸 روش: {method_label}\n"
+    )
+    if wallet_address:
+        text += f"💼 آدرس ولت: <code>{wallet_address}</code>\n"
+    text += (
+        f"💱 قیمت هر TON: {unit_price:,} تومان\n"
+        f"💰 مبلغ کل: <b>{total_price:,}</b> تومان\n\n"
+        "برای تکمیل خرید، مبلغ از کیف پولت کسر میشه."
+    )
+    await message.answer(text, reply_markup=kb.confirm_ton())
+
+
+@router.callback_query(F.data == "confirmton_go")
+async def cb_confirm_ton(call: CallbackQuery, bot: Bot, state: FSMContext):
+    data = await state.get_data()
+    qty = data.get("qty")
+    method = data.get("method")
+    wallet_address = data.get("wallet_address")
+    if not qty or not method:
+        await call.answer("اطلاعات سفارش نامعتبره، دوباره از اول امتحان کن.", show_alert=True)
+        return
+
+    unit_price = int(await db.get_setting("ton_unit_price", DEFAULT_TON_UNIT_PRICE))
+    total_price = round(qty * unit_price)
+
+    user = await db.get_user(call.from_user.id)
+    balance = user[2] if user else 0
+    if balance < total_price:
+        await call.answer("موجودی کافی نیست! اول حسابتو شارژ کن 💳", show_alert=True)
+        return
+
+    await state.clear()
+    method_label = "واریز به ولت شخصی" if method == "wallet" else "شارژ مستقیم اکانت تلگرام"
+    item_name = f"{qty} TON ({method_label})"
+
+    await db.update_balance(call.from_user.id, -total_price)
+    order_id = await db.create_order(call.from_user.id, "ارز تون", item_name, total_price)
+
+    confirm_text = (
+        "✅ ━━━━━━━━━━━━━━ ✅\n"
+        "<b>سفارش شما با موفقیت ثبت شد!</b>\n"
+        "✅ ━━━━━━━━━━━━━━ ✅\n\n"
+        f"🔖 شماره سفارش: <code>{order_id}</code>\n"
+        f"🪙 آیتم: {qty} TON — {method_label}\n"
+        f"💰 مبلغ: {total_price:,} تومان\n\n"
+        "⏳ تیم پشتیبانی به‌زودی سفارش رو پردازش می‌کنه."
+    )
+    await call.message.edit_text(confirm_text, reply_markup=kb.back_button().as_markup())
+    await call.answer("سفارش ثبت شد ✅")
+
+    order_target = config.ORDER_CHANNEL_ID if config.ORDER_CHANNEL_ID else config.ADMIN_ID
+    if order_target:
+        admin_text = (
+            f"🆕 سفارش جدید — ارز تون\n"
+            f"کاربر: {call.from_user.id} (@{call.from_user.username})\n"
+            f"مقدار: {qty} TON\n"
+            f"روش: {method_label}\n"
+        )
+        if wallet_address:
+            admin_text += f"💼 آدرس ولت: {wallet_address}\n"
+        admin_text += (
+            f"مبلغ: {total_price:,} تومان\n"
+            f"شماره سفارش: {order_id}"
+        )
+        await bot.send_message(order_target, admin_text, reply_markup=kb.admin_order_actions(order_id))
+
+
 # ---------------- مدیریت قیمت ری‌اکشن استارزی (فقط ادمین) ----------------
 @router.callback_query(F.data == "admin_reaction_price")
 async def cb_admin_reaction_price(call: CallbackQuery, state: FSMContext):
@@ -822,6 +1011,44 @@ async def admin_receive_reaction_price(message: Message, state: FSMContext):
     await message.answer(
         f"✅ قیمت هر ری‌اکشن به {new_price:,} تومان تغییر کرد.",
         reply_markup=kb.admin_reaction_price_actions()
+    )
+
+
+# ---------------- مدیریت قیمت ارز تون (فقط ادمین) ----------------
+@router.callback_query(F.data == "admin_ton_price")
+async def cb_admin_ton_price(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.clear()
+    unit_price = int(await db.get_setting("ton_unit_price", DEFAULT_TON_UNIT_PRICE))
+    text = f"🪙 قیمت فعلی هر TON: <b>{unit_price:,}</b> تومان"
+    await call.message.edit_text(text, reply_markup=kb.admin_ton_price_actions())
+    await call.answer()
+
+
+@router.callback_query(F.data == "admintonpriceedit")
+async def cb_admin_ton_price_edit_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.set_state(AdminState.waiting_ton_unit_price)
+    await call.message.edit_text("💱 قیمت جدید هر TON رو به تومان بفرست (فقط عدد):")
+    await call.answer()
+
+
+@router.message(AdminState.waiting_ton_unit_price)
+async def admin_receive_ton_price(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip().isdigit():
+        await message.answer("لطفاً فقط عدد بفرست (مثلاً 700000).")
+        return
+    new_price = int(message.text.strip())
+    await db.set_setting("ton_unit_price", new_price)
+    await state.clear()
+
+    await message.answer(
+        f"✅ قیمت هر TON به {new_price:,} تومان تغییر کرد.",
+        reply_markup=kb.admin_ton_price_actions()
     )
 
 
