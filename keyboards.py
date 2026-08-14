@@ -25,17 +25,14 @@ def main_reply_keyboard() -> ReplyKeyboardMarkup:
 # ---------- منوی اصلی ----------
 def main_menu(is_admin: bool = False, custom_items=None) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.button(text="⭐️ خرید استارز", callback_data="menu_stars")
-    b.button(text="🎁 خرید گیفت", callback_data="menu_gift")
-    b.button(text="💎 خرید پرمیوم", callback_data="menu_premium")
-    b.button(text="🎯 ری‌اکشن استارزی", callback_data="menu_reaction")
+    b.button(text="🛒 خرید محصول", callback_data="menu_products")
     b.button(text="💳 افزایش موجودی", callback_data="menu_charge")
     b.button(text="👤 حساب من", callback_data="menu_account")
     b.button(text="🔗 زیرمجموعه‌گیری", callback_data="menu_referral")
     b.button(text="📦 سفارش‌های من", callback_data="menu_orders")
     b.button(text="🆘 پشتیبانی", callback_data="menu_support")
 
-    sizes = [2, 2, 2, 2, 1]
+    sizes = [1, 2, 1, 2]
 
     custom_items = custom_items or []
     for item_id, title, _content in custom_items:
@@ -50,11 +47,23 @@ def main_menu(is_admin: bool = False, custom_items=None) -> InlineKeyboardMarkup
     return b.as_markup()
 
 
+# ---------- زیرمنوی «خرید محصول» ----------
+def products_menu() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="⭐️ خرید استارز", callback_data="menu_stars")
+    b.button(text="🎁 خرید گیفت", callback_data="menu_gift")
+    b.button(text="💎 خرید پرمیوم", callback_data="menu_premium")
+    b.button(text="🎯 ری‌اکشن استارزی", callback_data="menu_reaction")
+    b.button(text="🔙 بازگشت به منو", callback_data="menu_main")
+    b.adjust(2, 2, 1)
+    return b.as_markup()
+
+
 # ---------- تایید خرید ری‌اکشن استارزی ----------
 def confirm_reaction() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="✅ تایید و پرداخت از کیف پول", callback_data="confirmreaction_go")
-    b.button(text="🔙 بازگشت", callback_data="menu_main")
+    b.button(text="🔙 بازگشت", callback_data="menu_products")
     b.adjust(1)
     return b.as_markup()
 
@@ -79,7 +88,7 @@ def gift_type_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="🎊 گیفت های مناسبتی", callback_data="menu_gift_special")
     b.button(text="🧸 گیفت های عادی", callback_data="menu_gift_normal")
-    b.button(text="🔙 بازگشت", callback_data="menu_main")
+    b.button(text="🔙 بازگشت", callback_data="menu_products")
     b.adjust(1)
     return b.as_markup()
 
