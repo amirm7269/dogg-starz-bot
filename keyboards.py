@@ -23,14 +23,15 @@ def main_reply_keyboard() -> ReplyKeyboardMarkup:
 
 
 # ---------- منوی اصلی ----------
-def main_menu(is_admin: bool = False, custom_items=None) -> InlineKeyboardMarkup:
+def main_menu(is_admin: bool = False, custom_items=None, labels=None) -> InlineKeyboardMarkup:
+    L = labels or {}
     b = InlineKeyboardBuilder()
-    b.button(text="🛒 خرید محصول", callback_data="menu_products")
-    b.button(text="💳 افزایش موجودی", callback_data="menu_charge")
-    b.button(text="👤 حساب من", callback_data="menu_account")
-    b.button(text="🔗 زیرمجموعه‌گیری", callback_data="menu_referral")
-    b.button(text="📦 سفارش‌های من", callback_data="menu_orders")
-    b.button(text="🆘 پشتیبانی", callback_data="menu_support")
+    b.button(text=L.get("menu_products", "🛒 خرید محصول"), callback_data="menu_products")
+    b.button(text=L.get("menu_charge", "💳 افزایش موجودی"), callback_data="menu_charge")
+    b.button(text=L.get("menu_account", "👤 حساب من"), callback_data="menu_account")
+    b.button(text=L.get("menu_referral", "🔗 زیرمجموعه‌گیری"), callback_data="menu_referral")
+    b.button(text=L.get("menu_orders", "📦 سفارش‌های من"), callback_data="menu_orders")
+    b.button(text=L.get("menu_support", "🆘 پشتیبانی"), callback_data="menu_support")
 
     sizes = [1, 2, 1, 2]
 
@@ -48,13 +49,14 @@ def main_menu(is_admin: bool = False, custom_items=None) -> InlineKeyboardMarkup
 
 
 # ---------- زیرمنوی «خرید محصول» ----------
-def products_menu() -> InlineKeyboardMarkup:
+def products_menu(labels=None) -> InlineKeyboardMarkup:
+    L = labels or {}
     b = InlineKeyboardBuilder()
-    b.button(text="⭐️ خرید استارز", callback_data="menu_stars")
-    b.button(text="🎁 خرید گیفت", callback_data="menu_gift")
-    b.button(text="💎 خرید پرمیوم", callback_data="menu_premium")
-    b.button(text="🎯 ری‌اکشن استارزی", callback_data="menu_reaction")
-    b.button(text="🪙 خرید ارز تون", callback_data="menu_ton")
+    b.button(text=L.get("menu_stars", "⭐️ خرید استارز"), callback_data="menu_stars")
+    b.button(text=L.get("menu_gift", "🎁 خرید گیفت"), callback_data="menu_gift")
+    b.button(text=L.get("menu_premium", "💎 خرید پرمیوم"), callback_data="menu_premium")
+    b.button(text=L.get("menu_reaction", "🎯 ری‌اکشن استارزی"), callback_data="menu_reaction")
+    b.button(text=L.get("menu_ton", "🪙 خرید ارز تون"), callback_data="menu_ton")
     b.button(text="🔙 بازگشت به منو", callback_data="menu_main")
     b.adjust(2, 2, 1, 1)
     return b.as_markup()
@@ -70,10 +72,11 @@ def confirm_reaction() -> InlineKeyboardMarkup:
 
 
 # ---------- خرید ارز تون ----------
-def ton_method_menu() -> InlineKeyboardMarkup:
+def ton_method_menu(labels=None) -> InlineKeyboardMarkup:
+    L = labels or {}
     b = InlineKeyboardBuilder()
-    b.button(text="💼 واریز به ولت شخصی (حداقل 0.1 TON)", callback_data="ton_wallet")
-    b.button(text="📱 شارژ مستقیم اکانت تلگرام (حداقل 1 TON)", callback_data="ton_telegram")
+    b.button(text=L.get("ton_wallet", "💼 واریز به ولت شخصی (حداقل 0.1 TON)"), callback_data="ton_wallet")
+    b.button(text=L.get("ton_telegram", "📱 شارژ مستقیم اکانت تلگرام (حداقل 1 TON)"), callback_data="ton_telegram")
     b.button(text="🔙 بازگشت", callback_data="menu_products")
     b.adjust(1)
     return b.as_markup()
@@ -103,32 +106,35 @@ def account_menu() -> InlineKeyboardMarkup:
 
 
 # ---------- زیرمنوی گیفت: انتخاب مناسبتی/عادی ----------
-def gift_type_menu() -> InlineKeyboardMarkup:
+def gift_type_menu(labels=None) -> InlineKeyboardMarkup:
+    L = labels or {}
     b = InlineKeyboardBuilder()
-    b.button(text="🎊 گیفت های مناسبتی", callback_data="menu_gift_special")
-    b.button(text="🧸 گیفت های عادی", callback_data="menu_gift_normal")
+    b.button(text=L.get("menu_gift_special", "🎊 گیفت های مناسبتی"), callback_data="menu_gift_special")
+    b.button(text=L.get("menu_gift_normal", "🧸 گیفت های عادی"), callback_data="menu_gift_normal")
     b.button(text="🔙 بازگشت", callback_data="menu_products")
     b.adjust(1)
     return b.as_markup()
 
 
 # ---------- زیرمنوی خرید (ساخته‌شده از روی محصولات دیتابیس) ----------
-def category_menu(category: str, products, back_target="menu_main", show_custom_stars=False) -> InlineKeyboardMarkup:
+def category_menu(category: str, products, back_target="menu_main", show_custom_stars=False, labels=None) -> InlineKeyboardMarkup:
+    L = labels or {}
     b = InlineKeyboardBuilder()
     for product_id, name, price in products:
         b.button(text=f"{name} - {price:,} تومان", callback_data=f"item_{product_id}")
     if show_custom_stars:
-        b.button(text="🔢 تعداد دلخواه (حداقل 50 عدد)", callback_data="stars_custom")
+        b.button(text=L.get("stars_custom", "🔢 تعداد دلخواه (حداقل 50 عدد)"), callback_data="stars_custom")
     b.button(text="🔙 بازگشت", callback_data=back_target)
     b.adjust(1)
     return b.as_markup()
 
 
 # ---------- زیرمنو: افزایش موجودی ----------
-def charge_menu() -> InlineKeyboardMarkup:
+def charge_menu(labels=None) -> InlineKeyboardMarkup:
+    L = labels or {}
     b = InlineKeyboardBuilder()
-    b.button(text="💳 کارت به کارت", callback_data="charge_card")
-    b.button(text="🌐 درگاه آنلاین (به‌زودی)", callback_data="charge_gateway")
+    b.button(text=L.get("charge_card", "💳 کارت به کارت"), callback_data="charge_card")
+    b.button(text=L.get("charge_gateway", "🌐 درگاه آنلاین (به‌زودی)"), callback_data="charge_gateway")
     b.button(text="🔙 بازگشت", callback_data="menu_main")
     b.adjust(1)
     return b.as_markup()
@@ -238,6 +244,7 @@ def admin_panel_menu() -> InlineKeyboardMarkup:
     b.button(text="🎯 قیمت ری‌اکشن استارزی", callback_data="admin_reaction_price")
     b.button(text="🪙 قیمت ارز تون", callback_data="admin_ton_price")
     b.button(text="📝 مدیریت متن‌های ربات", callback_data="admin_texts")
+    b.button(text="🔤 مدیریت اسم دکمه‌ها", callback_data="admin_btns")
     b.button(text="💳 تغییر شماره کارت", callback_data="admin_card")
     b.button(text="🧩 مدیریت منوی سفارشی", callback_data="adminmenu_root")
     b.button(text="🔙 بازگشت", callback_data="menu_main")
@@ -328,6 +335,25 @@ def admin_text_view_actions(key: str) -> InlineKeyboardMarkup:
     b.button(text="✏️ ویرایش این متن", callback_data=f"admintextedit_{key}")
     b.button(text="♻️ بازگردانی به پیش‌فرض", callback_data=f"admintextreset_{key}")
     b.button(text="🔙 بازگشت به لیست متن‌ها", callback_data="admin_texts")
+    b.adjust(1)
+    return b.as_markup()
+
+
+# ---------- مدیریت اسم دکمه‌ها ----------
+def admin_btns_menu(btn_labels: dict) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for key, label in btn_labels.items():
+        b.button(text=label, callback_data=f"adminbtn_{key}")
+    b.button(text="🔙 بازگشت", callback_data="admin_panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_btn_view_actions(key: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✏️ ویرایش اسم این دکمه", callback_data=f"adminbtnedit_{key}")
+    b.button(text="♻️ بازگردانی به پیش‌فرض", callback_data=f"adminbtnreset_{key}")
+    b.button(text="🔙 بازگشت به لیست دکمه‌ها", callback_data="admin_btns")
     b.adjust(1)
     return b.as_markup()
 
