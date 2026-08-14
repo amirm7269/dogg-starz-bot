@@ -168,6 +168,7 @@ class AdminState(StatesGroup):
     waiting_new_text = State()       # data: text_key
     waiting_new_card_number = State()
     waiting_new_card_holder = State()  # data: card_number
+    waiting_reaction_unit_price = State()
 
 
 class MenuBuilderState(StatesGroup):
@@ -179,6 +180,11 @@ class MenuBuilderState(StatesGroup):
 
 class CustomStarsState(StatesGroup):
     waiting_qty = State()
+
+
+class ReactionState(StatesGroup):
+    waiting_qty = State()
+    waiting_post_link = State()
 
 
 class GiftState(StatesGroup):
@@ -203,6 +209,7 @@ def _valid_username(raw: str) -> str | None:
 
 
 DEFAULT_STARS_UNIT_PRICE = 450  # تومان به‌ازای هر استارز (پیش‌فرض، از پنل مدیریت قابل تغییره)
+DEFAULT_REACTION_UNIT_PRICE = 450  # تومان به‌ازای هر ری‌اکشن استارزی (پیش‌فرض، از پنل مدیریت قابل تغییره)
 
 
 # ---------------- متن‌های قابل‌ویرایش ربات (از پنل مدیریت) ----------------
@@ -646,6 +653,158 @@ async def cb_confirm_custom_stars(call: CallbackQuery, bot: Bot, state: FSMConte
             f"شماره سفارش: {order_id}",
             reply_markup=kb.admin_order_actions(order_id)
         )
+
+
+# ==================== ری‌اکشن استارزی ====================
+@router.callback_query(F.data == "menu_reaction")
+async def cb_menu_reaction(call: CallbackQuery, state: FSMContext):
+    unit_price = int(await db.get_setting("reaction_unit_price", DEFAULT_REACTION_UNIT_PRICE))
+    text = (
+        "🎯 ━━━━━━━━━━━━━━ 🎯\n"
+        "<b>ری‌اکشن استارزی</b>\n"
+        "🎯 ━━━━━━━━━━━━━━ 🎯\n\n"
+        f"💱 قیمت هر ری‌اکشن: {unit_price:,} تومان\n\n"
+        "چند تا ری‌اکشن استارزی می‌خوای؟ عدد رو بفرست:"
+    )
+    await call.message.edit_text(text, reply_markup=kb.back_button().as_markup())
+    await state.set_state(ReactionState.waiting_qty)
+    await call.answer()
+
+
+@router.message(ReactionState.waiting_qty)
+async def receive_reaction_qty(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip().isdigit():
+        await message.answer("لطفاً فقط عدد بفرست (مثلاً 50).")
+        return
+    qty = int(message.text.strip())
+    if qty < 1:
+        await message.answer("لطفاً یه عدد بزرگ‌تر از صفر بفرست.")
+        return
+
+    await state.update_data(qty=qty)
+    await state.set_state(ReactionState.waiting_post_link)
+    await message.answer("🔗 حالا لینک پستی که می‌خوای روش ری‌اکشن بخوره رو بفرست:")
+
+
+@router.message(ReactionState.waiting_post_link)
+async def receive_reaction_post_link(message: Message, state: FSMContext):
+    link = (message.text or "").strip()
+    if not link or not (link.startswith("http") or link.startswith("t.me") or link.startswith("@")):
+        await message.answer("لطفاً یه لینک معتبر از پست تلگرام بفرست (مثلاً https://t.me/channel/123):")
+        return
+
+    if not is_admin(message.from_user.id) and not message.from_user.username:
+        await message.answer(
+            "برای ثبت سفارش باید یوزرنیم تلگرام داشته باشی. از تنظیمات تلگرام یه Username بذار و دوباره امتحان کن."
+        )
+        await state.clear()
+        return
+
+    data = await state.get_data()
+    qty = data.get("qty")
+    unit_price = int(await db.get_setting("reaction_unit_price", DEFAULT_REACTION_UNIT_PRICE))
+    total_price = qty * unit_price
+    await state.update_data(link=link)
+
+    text = (
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n"
+        f"<b>{qty:,} ری‌اکشن استارزی</b>\n"
+        "🧾 ━━━━━━━━━━━━━━ 🧾\n\n"
+        f"🔗 پست: {link}\n"
+        f"💱 قیمت هر ری‌اکشن: {unit_price:,} تومان\n"
+        f"💰 مبلغ کل: <b>{total_price:,}</b> تومان\n\n"
+        "برای تکمیل خرید، مبلغ از کیف پولت کسر میشه."
+    )
+    await message.answer(text, reply_markup=kb.confirm_reaction())
+
+
+@router.callback_query(F.data == "confirmreaction_go")
+async def cb_confirm_reaction(call: CallbackQuery, bot: Bot, state: FSMContext):
+    data = await state.get_data()
+    qty = data.get("qty")
+    link = data.get("link")
+    if not qty or not link:
+        await call.answer("اطلاعات سفارش نامعتبره، دوباره از اول امتحان کن.", show_alert=True)
+        return
+
+    unit_price = int(await db.get_setting("reaction_unit_price", DEFAULT_REACTION_UNIT_PRICE))
+    total_price = qty * unit_price
+
+    user = await db.get_user(call.from_user.id)
+    balance = user[2] if user else 0
+    if balance < total_price:
+        await call.answer("موجودی کافی نیست! اول حسابتو شارژ کن 💳", show_alert=True)
+        return
+
+    await state.clear()
+    item_name = f"{qty:,} ری‌اکشن استارزی روی پست: {link}"
+
+    await db.update_balance(call.from_user.id, -total_price)
+    order_id = await db.create_order(call.from_user.id, "ری‌اکشن استارزی", item_name, total_price)
+
+    await call.message.edit_text(
+        "✅ ━━━━━━━━━━━━━━ ✅\n"
+        "<b>سفارش شما با موفقیت ثبت شد!</b>\n"
+        "✅ ━━━━━━━━━━━━━━ ✅\n\n"
+        f"🔖 شماره سفارش: <code>{order_id}</code>\n"
+        f"🎯 آیتم: {qty:,} ری‌اکشن استارزی\n"
+        f"🔗 پست: {link}\n"
+        f"💰 مبلغ: {total_price:,} تومان\n\n"
+        "⏳ تیم پشتیبانی به‌زودی سفارش رو پردازش می‌کنه.",
+        reply_markup=kb.back_button().as_markup()
+    )
+    await call.answer("سفارش ثبت شد ✅")
+
+    reaction_target = config.REACTION_CHANNEL_ID if config.REACTION_CHANNEL_ID else config.ADMIN_ID
+    if reaction_target:
+        await bot.send_message(
+            reaction_target,
+            f"🆕 سفارش جدید — ری‌اکشن استارزی\n"
+            f"کاربر: {call.from_user.id} (@{call.from_user.username})\n"
+            f"تعداد: {qty:,} ری‌اکشن\n"
+            f"🔗 پست: {link}\n"
+            f"مبلغ: {total_price:,} تومان\n"
+            f"شماره سفارش: {order_id}",
+            reply_markup=kb.admin_order_actions(order_id)
+        )
+
+
+# ---------------- مدیریت قیمت ری‌اکشن استارزی (فقط ادمین) ----------------
+@router.callback_query(F.data == "admin_reaction_price")
+async def cb_admin_reaction_price(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.clear()
+    unit_price = int(await db.get_setting("reaction_unit_price", DEFAULT_REACTION_UNIT_PRICE))
+    text = f"🎯 قیمت فعلی هر ری‌اکشن استارزی: <b>{unit_price:,}</b> تومان"
+    await call.message.edit_text(text, reply_markup=kb.admin_reaction_price_actions())
+    await call.answer()
+
+
+@router.callback_query(F.data == "adminreactionpriceedit")
+async def cb_admin_reaction_price_edit_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.set_state(AdminState.waiting_reaction_unit_price)
+    await call.message.edit_text("💱 قیمت جدید هر ری‌اکشن رو به تومان بفرست (فقط عدد):")
+    await call.answer()
+
+
+@router.message(AdminState.waiting_reaction_unit_price)
+async def admin_receive_reaction_price(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip().isdigit():
+        await message.answer("لطفاً فقط عدد بفرست (مثلاً 450).")
+        return
+    new_price = int(message.text.strip())
+    await db.set_setting("reaction_unit_price", new_price)
+    await state.clear()
+
+    await message.answer(
+        f"✅ قیمت هر ری‌اکشن به {new_price:,} تومان تغییر کرد.",
+        reply_markup=kb.admin_reaction_price_actions()
+    )
 
 
 @router.callback_query(F.data == "menu_gift")
