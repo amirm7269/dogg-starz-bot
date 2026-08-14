@@ -356,6 +356,14 @@ async def set_setting(key: str, value: str):
         )
 
 
+async def get_settings_by_prefix(prefix: str) -> dict:
+    """همه‌ی تنظیمات با یه پیشوند مشخص رو یه‌جا برمی‌گردونه (کلیدها بدون پیشوند)"""
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT key, value FROM settings WHERE key LIKE $1", prefix + "%")
+        return {r["key"][len(prefix):]: r["value"] for r in rows}
+
+
 # ---------------- منوی سفارشی (دکمه‌های اصلی و زیرمجموعه‌ی دلخواه ادمین) ----------------
 async def add_menu_item(parent_id, title: str, content: str):
     pool = await _get_pool()
