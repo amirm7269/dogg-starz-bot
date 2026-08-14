@@ -166,6 +166,7 @@ class AdminState(StatesGroup):
     waiting_new_item_price = State() # data: category, name
     waiting_stars_unit_price = State()
     waiting_new_text = State()       # data: text_key
+    waiting_new_button_label = State()  # data: btn_key
     waiting_new_card_number = State()
     waiting_new_card_holder = State()  # data: card_number
     waiting_reaction_unit_price = State()
@@ -293,6 +294,18 @@ TEXT_DEFAULTS = {
         "💳 ━━━━━━━━━━━━━━ 💳\n\n"
         "روش دلخواهت رو انتخاب کن:"
     ),
+    "reaction_menu": (
+        "🎯 ━━━━━━━━━━━━━━ 🎯\n"
+        "<b>ری‌اکشن استارزی</b>\n"
+        "🎯 ━━━━━━━━━━━━━━ 🎯\n\n"
+        "چند تا ری‌اکشن استارزی می‌خوای؟ عدد رو بفرست:"
+    ),
+    "ton_menu": (
+        "🪙 ━━━━━━━━━━━━━━ 🪙\n"
+        "<b>خرید ارز تون (TON)</b>\n"
+        "🪙 ━━━━━━━━━━━━━━ 🪙\n\n"
+        "کدوم روش رو می‌خوای؟"
+    ),
 }
 
 TEXT_LABELS = {
@@ -308,7 +321,61 @@ TEXT_LABELS = {
     "orders_empty": "📦 پیام وقتی سفارشی نداری",
     "support": "🆘 پیام پشتیبانی",
     "charge_menu": "💳 پیام صفحه‌ی افزایش موجودی",
+    "reaction_menu": "🎯 پیام صفحه‌ی ری‌اکشن استارزی",
+    "ton_menu": "🪙 پیام صفحه‌ی خرید ارز تون",
 }
+
+
+# ---------------- برچسب دکمه‌های قابل‌ویرایش ----------------
+BUTTON_LABEL_DEFAULTS = {
+    "menu_products": "🛒 خرید محصول",
+    "menu_charge": "💳 افزایش موجودی",
+    "menu_account": "👤 حساب من",
+    "menu_referral": "🔗 زیرمجموعه‌گیری",
+    "menu_orders": "📦 سفارش‌های من",
+    "menu_support": "🆘 پشتیبانی",
+    "menu_stars": "⭐️ خرید استارز",
+    "menu_gift": "🎁 خرید گیفت",
+    "menu_premium": "💎 خرید پرمیوم",
+    "menu_reaction": "🎯 ری‌اکشن استارزی",
+    "menu_ton": "🪙 خرید ارز تون",
+    "menu_gift_special": "🎊 گیفت های مناسبتی",
+    "menu_gift_normal": "🧸 گیفت های عادی",
+    "ton_wallet": "💼 واریز به ولت شخصی (حداقل 0.1 TON)",
+    "ton_telegram": "📱 شارژ مستقیم اکانت تلگرام (حداقل 1 TON)",
+    "charge_card": "💳 کارت به کارت",
+    "charge_gateway": "🌐 درگاه آنلاین (به‌زودی)",
+    "stars_custom": "🔢 تعداد دلخواه (حداقل 50 عدد)",
+}
+
+BUTTON_LABEL_NAMES = {
+    "menu_products": "دکمه‌ی «خرید محصول» (منوی اصلی)",
+    "menu_charge": "دکمه‌ی «افزایش موجودی» (منوی اصلی)",
+    "menu_account": "دکمه‌ی «حساب من» (منوی اصلی)",
+    "menu_referral": "دکمه‌ی «زیرمجموعه‌گیری» (منوی اصلی)",
+    "menu_orders": "دکمه‌ی «سفارش‌های من» (منوی اصلی)",
+    "menu_support": "دکمه‌ی «پشتیبانی» (منوی اصلی)",
+    "menu_stars": "دکمه‌ی «خرید استارز» (زیرمجموعه)",
+    "menu_gift": "دکمه‌ی «خرید گیفت» (زیرمجموعه)",
+    "menu_premium": "دکمه‌ی «خرید پرمیوم» (زیرمجموعه)",
+    "menu_reaction": "دکمه‌ی «ری‌اکشن استارزی» (زیرمجموعه)",
+    "menu_ton": "دکمه‌ی «خرید ارز تون» (زیرمجموعه)",
+    "menu_gift_special": "دکمه‌ی «گیفت‌های مناسبتی»",
+    "menu_gift_normal": "دکمه‌ی «گیفت‌های عادی»",
+    "ton_wallet": "دکمه‌ی «واریز به ولت شخصی»",
+    "ton_telegram": "دکمه‌ی «شارژ مستقیم اکانت تلگرام»",
+    "charge_card": "دکمه‌ی «کارت به کارت»",
+    "charge_gateway": "دکمه‌ی «درگاه آنلاین»",
+    "stars_custom": "دکمه‌ی «تعداد دلخواه استارز»",
+}
+
+
+async def get_button_labels() -> dict:
+    """همه‌ی برچسب‌های دکمه‌ها رو برمی‌گردونه (سفارشی‌شده یا پیش‌فرض)"""
+    custom = await db.get_settings_by_prefix("btn_")
+    labels = dict(BUTTON_LABEL_DEFAULTS)
+    labels.update(custom)
+    return labels
 
 
 async def get_text(key: str) -> str:
@@ -325,7 +392,8 @@ async def get_card_info() -> tuple[str, str]:
 async def build_main_menu(user_id: int):
     """منوی اصلی رو با دکمه‌های ثابت + دکمه‌های اصلی سفارشی که ادمین اضافه کرده می‌سازه"""
     custom_items = await db.get_menu_items(None)
-    return kb.main_menu(is_admin(user_id), custom_items)
+    labels = await get_button_labels()
+    return kb.main_menu(is_admin(user_id), custom_items, labels)
 
 
 GIFT_SPECIAL_ITEMS = [
@@ -437,7 +505,8 @@ async def reply_btn_buy(message: Message):
 @router.message(F.text == "💳 افزایش موجودی")
 async def reply_btn_charge(message: Message):
     text = await get_text("charge_menu")
-    await message.answer(text, reply_markup=kb.charge_menu())
+    labels = await get_button_labels()
+    await message.answer(text, reply_markup=kb.charge_menu(labels))
 
 
 @router.message(F.text == "👤 حساب کاربری")
@@ -537,7 +606,8 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
 async def cb_menu_products(call: CallbackQuery, state: FSMContext):
     await state.clear()
     text = await get_text("products_menu")
-    await call.message.edit_text(text, reply_markup=kb.products_menu())
+    labels = await get_button_labels()
+    await call.message.edit_text(text, reply_markup=kb.products_menu(labels))
     await call.answer()
 
 
@@ -546,9 +616,10 @@ async def cb_menu_products(call: CallbackQuery, state: FSMContext):
 async def cb_stars(call: CallbackQuery):
     products = await db.get_products("stars")
     text = await get_text("stars_menu")
+    labels = await get_button_labels()
     await call.message.edit_text(
         text,
-        reply_markup=kb.category_menu("stars", products, back_target="menu_products", show_custom_stars=True)
+        reply_markup=kb.category_menu("stars", products, back_target="menu_products", show_custom_stars=True, labels=labels)
     )
     await call.answer()
 
@@ -684,13 +755,8 @@ async def cb_confirm_custom_stars(call: CallbackQuery, bot: Bot, state: FSMConte
 @router.callback_query(F.data == "menu_reaction")
 async def cb_menu_reaction(call: CallbackQuery, state: FSMContext):
     unit_price = int(await db.get_setting("reaction_unit_price", DEFAULT_REACTION_UNIT_PRICE))
-    text = (
-        "🎯 ━━━━━━━━━━━━━━ 🎯\n"
-        "<b>ری‌اکشن استارزی</b>\n"
-        "🎯 ━━━━━━━━━━━━━━ 🎯\n\n"
-        f"💱 قیمت هر ری‌اکشن: {unit_price:,} تومان\n\n"
-        "چند تا ری‌اکشن استارزی می‌خوای؟ عدد رو بفرست:"
-    )
+    intro = await get_text("reaction_menu")
+    text = f"{intro}\n\n💱 قیمت هر ری‌اکشن: {unit_price:,} تومان"
     await call.message.edit_text(text, reply_markup=kb.back_button("menu_products").as_markup())
     await state.set_state(ReactionState.waiting_qty)
     await call.answer()
@@ -799,14 +865,10 @@ async def cb_confirm_reaction(call: CallbackQuery, bot: Bot, state: FSMContext):
 async def cb_menu_ton(call: CallbackQuery, state: FSMContext):
     await state.clear()
     unit_price = int(await db.get_setting("ton_unit_price", DEFAULT_TON_UNIT_PRICE))
-    text = (
-        "🪙 ━━━━━━━━━━━━━━ 🪙\n"
-        "<b>خرید ارز تون (TON)</b>\n"
-        "🪙 ━━━━━━━━━━━━━━ 🪙\n\n"
-        f"💱 قیمت هر TON: {unit_price:,} تومان\n\n"
-        "کدوم روش رو می‌خوای؟"
-    )
-    await call.message.edit_text(text, reply_markup=kb.ton_method_menu())
+    intro = await get_text("ton_menu")
+    text = f"{intro}\n\n💱 قیمت هر TON: {unit_price:,} تومان"
+    labels = await get_button_labels()
+    await call.message.edit_text(text, reply_markup=kb.ton_method_menu(labels))
     await call.answer()
 
 
@@ -1055,7 +1117,8 @@ async def admin_receive_ton_price(message: Message, state: FSMContext):
 @router.callback_query(F.data == "menu_gift")
 async def cb_gift(call: CallbackQuery):
     text = await get_text("gift_menu")
-    await call.message.edit_text(text, reply_markup=kb.gift_type_menu())
+    labels = await get_button_labels()
+    await call.message.edit_text(text, reply_markup=kb.gift_type_menu(labels))
     await call.answer()
 
 
@@ -1352,7 +1415,8 @@ async def cb_support(call: CallbackQuery):
 @router.callback_query(F.data == "menu_charge")
 async def cb_charge_menu(call: CallbackQuery):
     text = await get_text("charge_menu")
-    await call.message.edit_text(text, reply_markup=kb.charge_menu())
+    labels = await get_button_labels()
+    await call.message.edit_text(text, reply_markup=kb.charge_menu(labels))
     await call.answer()
 
 
@@ -2109,6 +2173,81 @@ async def cb_admin_text_reset(call: CallbackQuery):
     await call.message.edit_text(
         f"♻️ {label} به حالت پیش‌فرض برگشت.\n\n<b>متن فعلی:</b>\n\n{default_text}",
         reply_markup=kb.admin_text_view_actions(key)
+    )
+    await call.answer("بازگردانی شد ✅")
+
+
+# ---------------- مدیریت اسم دکمه‌ها (فقط ادمین) ----------------
+@router.callback_query(F.data == "admin_btns")
+async def cb_admin_btns(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    await state.clear()
+    labels = await get_button_labels()
+    display = {key: BUTTON_LABEL_NAMES.get(key, key) for key in BUTTON_LABEL_DEFAULTS}
+    await call.message.edit_text(
+        "🔤 <b>مدیریت اسم دکمه‌ها</b>\nهر دکمه‌ای که می‌خوای اسمشو عوض کنی رو انتخاب کن:",
+        reply_markup=kb.admin_btns_menu(display)
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adminbtn_"))
+async def cb_admin_btn_view(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    key = call.data.replace("adminbtn_", "")
+    labels = await get_button_labels()
+    current = labels.get(key, BUTTON_LABEL_DEFAULTS.get(key, ""))
+    name = BUTTON_LABEL_NAMES.get(key, key)
+    text = f"{name}\n\n<b>اسم فعلی:</b> {current}"
+    await call.message.edit_text(text, reply_markup=kb.admin_btn_view_actions(key))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adminbtnedit_"))
+async def cb_admin_btn_edit_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    key = call.data.replace("adminbtnedit_", "")
+    await state.update_data(btn_key=key)
+    await state.set_state(AdminState.waiting_new_button_label)
+    await call.message.edit_text("✏️ اسم جدید این دکمه رو بفرست (ایموجی هم می‌تونی بذاری):")
+    await call.answer()
+
+
+@router.message(AdminState.waiting_new_button_label)
+async def admin_receive_new_button_label(message: Message, state: FSMContext):
+    if not message.text or not message.text.strip():
+        await message.answer("لطفاً یه اسم معتبر بفرست.")
+        return
+    data = await state.get_data()
+    key = data.get("btn_key")
+    await db.set_setting(f"btn_{key}", message.text.strip())
+    await state.clear()
+
+    name = BUTTON_LABEL_NAMES.get(key, key)
+    await message.answer(
+        f"✅ اسم {name} به‌روزرسانی شد.",
+        reply_markup=kb.admin_btn_view_actions(key)
+    )
+
+
+@router.callback_query(F.data.startswith("adminbtnreset_"))
+async def cb_admin_btn_reset(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔️ فقط ادمین دسترسی داره.", show_alert=True)
+        return
+    key = call.data.replace("adminbtnreset_", "")
+    default_label = BUTTON_LABEL_DEFAULTS.get(key, "")
+    await db.set_setting(f"btn_{key}", default_label)
+    name = BUTTON_LABEL_NAMES.get(key, key)
+    await call.message.edit_text(
+        f"♻️ {name} به حالت پیش‌فرض برگشت.\n\n<b>اسم فعلی:</b> {default_label}",
+        reply_markup=kb.admin_btn_view_actions(key)
     )
     await call.answer("بازگردانی شد ✅")
 
