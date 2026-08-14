@@ -54,8 +54,9 @@ def products_menu() -> InlineKeyboardMarkup:
     b.button(text="🎁 خرید گیفت", callback_data="menu_gift")
     b.button(text="💎 خرید پرمیوم", callback_data="menu_premium")
     b.button(text="🎯 ری‌اکشن استارزی", callback_data="menu_reaction")
+    b.button(text="🪙 خرید ارز تون", callback_data="menu_ton")
     b.button(text="🔙 بازگشت به منو", callback_data="menu_main")
-    b.adjust(2, 2, 1)
+    b.adjust(2, 2, 1, 1)
     return b.as_markup()
 
 
@@ -63,6 +64,24 @@ def products_menu() -> InlineKeyboardMarkup:
 def confirm_reaction() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="✅ تایید و پرداخت از کیف پول", callback_data="confirmreaction_go")
+    b.button(text="🔙 بازگشت", callback_data="menu_products")
+    b.adjust(1)
+    return b.as_markup()
+
+
+# ---------- خرید ارز تون ----------
+def ton_method_menu() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="💼 واریز به ولت شخصی (حداقل 0.1 TON)", callback_data="ton_wallet")
+    b.button(text="📱 شارژ مستقیم اکانت تلگرام (حداقل 1 TON)", callback_data="ton_telegram")
+    b.button(text="🔙 بازگشت", callback_data="menu_products")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def confirm_ton() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ تایید و پرداخت از کیف پول", callback_data="confirmton_go")
     b.button(text="🔙 بازگشت", callback_data="menu_products")
     b.adjust(1)
     return b.as_markup()
@@ -217,6 +236,7 @@ def admin_panel_menu() -> InlineKeyboardMarkup:
     b.button(text="🧸 مدیریت گیفت عادی", callback_data="admincat_gift_normal")
     b.button(text="⭐ مدیریت پرمیوم", callback_data="admincat_premium")
     b.button(text="🎯 قیمت ری‌اکشن استارزی", callback_data="admin_reaction_price")
+    b.button(text="🪙 قیمت ارز تون", callback_data="admin_ton_price")
     b.button(text="📝 مدیریت متن‌های ربات", callback_data="admin_texts")
     b.button(text="💳 تغییر شماره کارت", callback_data="admin_card")
     b.button(text="🧩 مدیریت منوی سفارشی", callback_data="adminmenu_root")
@@ -228,6 +248,14 @@ def admin_panel_menu() -> InlineKeyboardMarkup:
 def admin_reaction_price_actions() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="💱 تغییر قیمت هر ری‌اکشن", callback_data="adminreactionpriceedit")
+    b.button(text="🔙 بازگشت", callback_data="admin_panel")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_ton_price_actions() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="💱 تغییر قیمت هر TON", callback_data="admintonpriceedit")
     b.button(text="🔙 بازگشت", callback_data="admin_panel")
     b.adjust(1)
     return b.as_markup()
