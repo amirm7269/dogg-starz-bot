@@ -230,6 +230,12 @@ TEXT_DEFAULTS = {
         "✨ ━━━━━━━━━━━━━━ ✨\n\n"
         "👇 یکی از گزینه‌های زیر رو انتخاب کن:"
     ),
+    "products_menu": (
+        "🛒 ━━━━━━━━━━━━━━ 🛒\n"
+        "<b>خرید محصول</b>\n"
+        "🛒 ━━━━━━━━━━━━━━ 🛒\n\n"
+        "کدوم محصول رو می‌خوای؟"
+    ),
     "stars_menu": (
         "⭐️ ━━━━━━━━━━━━━━ ⭐️\n"
         "<b>خرید استارز تلگرام</b>\n"
@@ -285,6 +291,7 @@ TEXT_DEFAULTS = {
 TEXT_LABELS = {
     "welcome": "👋 پیام خوش‌آمدگویی (استارت)",
     "menu_main": "🏠 پیام منوی اصلی",
+    "products_menu": "🛒 پیام صفحه‌ی خرید محصول",
     "stars_menu": "⭐️ پیام صفحه‌ی خرید استارز",
     "gift_menu": "🎁 پیام صفحه‌ی انتخاب نوع گیفت",
     "gift_special_menu": "🎊 پیام گیفت‌های مناسبتی",
@@ -519,12 +526,23 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
+@router.callback_query(F.data == "menu_products")
+async def cb_menu_products(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    text = await get_text("products_menu")
+    await call.message.edit_text(text, reply_markup=kb.products_menu())
+    await call.answer()
+
+
 # ---------------- زیرمنوهای خرید ----------------
 @router.callback_query(F.data == "menu_stars")
 async def cb_stars(call: CallbackQuery):
     products = await db.get_products("stars")
     text = await get_text("stars_menu")
-    await call.message.edit_text(text, reply_markup=kb.category_menu("stars", products, show_custom_stars=True))
+    await call.message.edit_text(
+        text,
+        reply_markup=kb.category_menu("stars", products, back_target="menu_products", show_custom_stars=True)
+    )
     await call.answer()
 
 
@@ -666,7 +684,7 @@ async def cb_menu_reaction(call: CallbackQuery, state: FSMContext):
         f"💱 قیمت هر ری‌اکشن: {unit_price:,} تومان\n\n"
         "چند تا ری‌اکشن استارزی می‌خوای؟ عدد رو بفرست:"
     )
-    await call.message.edit_text(text, reply_markup=kb.back_button().as_markup())
+    await call.message.edit_text(text, reply_markup=kb.back_button("menu_products").as_markup())
     await state.set_state(ReactionState.waiting_qty)
     await call.answer()
 
@@ -737,7 +755,7 @@ async def cb_confirm_reaction(call: CallbackQuery, bot: Bot, state: FSMContext):
         return
 
     await state.clear()
-    item_name = f"{qty:,} ری‌اکشن استارزی روی پست: {link}"
+    item_name = f"{qty:,} ری‌اکشن استارزی"
 
     await db.update_balance(call.from_user.id, -total_price)
     order_id = await db.create_order(call.from_user.id, "ری‌اکشن استارزی", item_name, total_price)
@@ -840,7 +858,7 @@ async def cb_gift_normal(call: CallbackQuery):
 async def cb_premium(call: CallbackQuery):
     products = await db.get_products("premium")
     text = await get_text("premium_menu")
-    await call.message.edit_text(text, reply_markup=kb.category_menu("premium", products))
+    await call.message.edit_text(text, reply_markup=kb.category_menu("premium", products, back_target="menu_products"))
     await call.answer()
 
 
